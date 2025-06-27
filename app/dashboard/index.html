@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>📱 Android Telemetry Dashboard</title>
+    <title>Android Telemetry Dashboard</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
     <style>
         * {
@@ -71,6 +71,33 @@
             0% { opacity: 1; }
             50% { opacity: 0.5; }
             100% { opacity: 1; }
+        }
+
+        .protocol-indicator {
+            background: rgba(0,255,0,0.1);
+            border: 2px solid #00ff00;
+            border-radius: 10px;
+            padding: 10px;
+            margin-bottom: 20px;
+            color: white;
+            text-align: center;
+        }
+
+        .device-selector {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 10px;
+            color: white;
+        }
+
+        .device-selector select {
+            padding: 8px 12px;
+            border-radius: 5px;
+            border: none;
+            margin-left: 10px;
+            background: white;
+            color: #333;
         }
 
         .grid {
@@ -142,67 +169,6 @@
             min-width: 120px;
         }
 
-        .logs-container {
-            background: rgba(255,255,255,0.95);
-            backdrop-filter: blur(10px);
-            border-radius: 15px;
-            padding: 25px;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
-            max-height: 400px;
-            overflow-y: auto;
-        }
-
-        .logs-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 15px;
-            padding-bottom: 10px;
-            border-bottom: 2px solid #f0f0f0;
-        }
-
-        .log-entry {
-            font-family: 'Courier New', monospace;
-            font-size: 0.9em;
-            padding: 8px 12px;
-            margin: 5px 0;
-            border-radius: 8px;
-            border-left: 4px solid #007bff;
-            background: #f8f9fa;
-        }
-
-        .log-timestamp {
-            color: #666;
-            font-size: 0.8em;
-        }
-
-        .log-topic {
-            font-weight: bold;
-            color: #007bff;
-        }
-
-        .clear-btn {
-            background: #ff4757;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 8px;
-            cursor: pointer;
-            font-weight: bold;
-            transition: background 0.3s ease;
-        }
-
-        .clear-btn:hover {
-            background: #ff3742;
-        }
-
-        .no-data {
-            text-align: center;
-            color: #999;
-            font-style: italic;
-            padding: 20px;
-        }
-
         .progress-bar {
             width: 100%;
             height: 8px;
@@ -225,11 +191,6 @@
             border-radius: 15px;
             padding: 20px;
             box-shadow: 0 8px 32px rgba(0,0,0,0.1);
-        }
-
-        .controls h2 {
-            margin-bottom: 15px;
-            color: #333;
         }
 
         .control-group {
@@ -263,52 +224,52 @@
             background: #0056b3;
         }
 
-        .device-selector {
-            margin-bottom: 20px;
-            padding: 15px;
-            background: rgba(255,255,255,0.1);
-            border-radius: 10px;
-            color: white;
-        }
-
-        .device-selector select {
-            padding: 8px 12px;
-            border-radius: 5px;
-            border: none;
-            margin-left: 10px;
-            background: white;
-            color: #333;
-        }
-
-        .response-log {
+        .logs-container {
             background: rgba(255,255,255,0.95);
-            margin-top: 20px;
-            padding: 15px;
-            border-radius: 10px;
-            max-height: 200px;
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            max-height: 400px;
             overflow-y: auto;
         }
 
-        .response-entry {
-            margin: 5px 0;
-            padding: 8px;
-            background: #e8f5e8;
-            border-radius: 5px;
-            font-family: monospace;
+        .log-entry {
+            font-family: 'Courier New', monospace;
             font-size: 0.9em;
+            padding: 8px 12px;
+            margin: 5px 0;
+            border-radius: 8px;
+            border-left: 4px solid #007bff;
+            background: #f8f9fa;
         }
 
-        .response-entry.error {
-            background: #f5e8e8;
+        .log-entry.protobuf {
+            border-left-color: #28a745;
+            background: #f0fff0;
+        }
+
+        .clear-btn {
+            background: #ff4757;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.3s ease;
+        }
+
+        .no-data {
+            text-align: center;
+            color: #999;
+            font-style: italic;
+            padding: 20px;
         }
     </style>
 </head>
 <body>
 <div class="container">
-    <div class="header">
-        <h1>Android Telemetry Dashboard</h1>
-        <p>Real-time device monitoring & remote control via MQTT</p>
-    </div>
 
     <div class="status-bar">
         <div class="connection-status">
@@ -321,9 +282,8 @@
         </div>
     </div>
 
-    <!-- Device Selector -->
     <div class="device-selector">
-        <label for="deviceSelect">🎯 Select Target Device:</label>
+        <label for="deviceSelect">Select Target Device:</label>
         <select id="deviceSelect">
             <option value="">Auto-detect from messages</option>
         </select>
@@ -334,7 +294,7 @@
         <!-- Device Info Card -->
         <div class="card">
             <div class="card-header">
-                <div class="card-icon">📱</div>
+                <div class="card-icon"></div>
                 <div class="card-title">Device Information</div>
             </div>
             <div class="data-row">
@@ -362,7 +322,7 @@
         <!-- Battery Card -->
         <div class="card">
             <div class="card-header">
-                <div class="card-icon">🔋</div>
+                <div class="card-icon"></div>
                 <div class="card-title">Battery Status</div>
             </div>
             <div class="data-row">
@@ -389,7 +349,7 @@
         <!-- Memory Card -->
         <div class="card">
             <div class="card-header">
-                <div class="card-icon">🧠</div>
+                <div class="card-icon"></div>
                 <div class="card-title">Memory Usage</div>
             </div>
             <div class="data-row">
@@ -412,7 +372,7 @@
         <!-- Network Card -->
         <div class="card">
             <div class="card-header">
-                <div class="card-icon">📶</div>
+                <div class="card-icon"></div>
                 <div class="card-title">Network Status</div>
             </div>
             <div class="data-row">
@@ -436,7 +396,7 @@
         <!-- Sensors Card -->
         <div class="card">
             <div class="card-header">
-                <div class="card-icon">🌡️</div>
+                <div class="card-icon"></div>
                 <div class="card-title">Sensor Data</div>
             </div>
             <div class="data-row">
@@ -460,119 +420,166 @@
         <!-- Statistics Card -->
         <div class="card">
             <div class="card-header">
-                <div class="card-icon">📊</div>
-                <div class="card-title">Statistics</div>
+                <div class="card-icon"></div>
+                <div class="card-title">Protocol Buffer Stats</div>
             </div>
             <div class="data-row">
-                <span class="data-label">Messages Received:</span>
+                <span class="data-label">Total Messages:</span>
                 <span class="data-value" id="msgCount">0</span>
             </div>
             <div class="data-row">
-                <span class="data-label">Device Messages:</span>
-                <span class="data-value" id="deviceMsgCount">0</span>
+                <span class="data-label">Commands Sent:</span>
+                <span class="data-value" id="commandsSent">0</span>
             </div>
             <div class="data-row">
-                <span class="data-label">Battery Messages:</span>
-                <span class="data-value" id="batteryMsgCount">0</span>
+                <span class="data-label">Responses Received:</span>
+                <span class="data-value" id="responsesReceived">0</span>
             </div>
             <div class="data-row">
-                <span class="data-label">Sensor Messages:</span>
-                <span class="data-value" id="sensorMsgCount">0</span>
+                <span class="data-label">Data Saved:</span>
+                <span class="data-value" id="dataSaved">0 KB</span>
             </div>
         </div>
     </div>
 
-    <!-- FIXED Controls Section -->
     <div class="controls">
-        <h2>🛠️ Device Remote Control</h2>
+        <h2>Protobuf Remote Control</h2>
 
         <div class="control-group">
-            <h3>🔦 Flashlight Controls</h3>
-            <button onclick="sendCommand('flashlight','on')">🔦 Turn ON</button>
-            <button onclick="sendCommand('flashlight','off')">🔦 Turn OFF</button>
-            <button onclick="sendCommand('flashlight','toggle')">🔦 Toggle</button>
+            <h3>Flashlight Controls</h3>
+            <button onclick="sendProtobufCommand('FLASHLIGHT', 'FLASHLIGHT_ON')">Turn ON</button>
+            <button onclick="sendProtobufCommand('FLASHLIGHT', 'FLASHLIGHT_OFF')">Turn OFF</button>
+            <button onclick="sendProtobufCommand('FLASHLIGHT', 'FLASHLIGHT_TOGGLE')">Toggle</button>
         </div>
 
         <div class="control-group">
-            <h3>📷 Camera Controls</h3>
-            <button onclick="sendCommand('camera','open')">📷 Open Camera</button>
-            <button onclick="sendCommand('camera','take_photo')">📸 Take Photo</button>
+            <h3>Camera Controls</h3>
+            <button onclick="sendProtobufCommand('CAMERA', 'CAMERA_OPEN')">Open Camera</button>
+            <button onclick="sendProtobufCommand('CAMERA', 'CAMERA_TAKE_PHOTO')">Take Photo</button>
         </div>
 
         <div class="control-group">
-            <h3>📳 Vibration Controls</h3>
-            <button onclick="sendCommand('vibrate','short')">📳 Short Buzz</button>
-            <button onclick="sendCommand('vibrate','long')">📳 Long Buzz</button>
-            <button onclick="sendCommand('vibrate','pattern')">📳 Pattern</button>
+            <h3>Vibration Controls</h3>
+            <button onclick="sendProtobufCommand('VIBRATE', 'VIBRATE_SHORT')">Short Buzz</button>
+            <button onclick="sendProtobufCommand('VIBRATE', 'VIBRATE_LONG')">Long Buzz</button>
+            <button onclick="sendProtobufCommand('VIBRATE', 'VIBRATE_PATTERN')">Pattern</button>
         </div>
 
         <div class="control-group">
-            <h3>🔊 Volume Controls</h3>
-            <button onclick="sendCommand('volume','up')">🔊 Volume UP</button>
-            <button onclick="sendCommand('volume','down')">🔉 Volume DOWN</button>
-            <button onclick="sendCommand('volume','mute')">🔇 Mute</button>
-            <button onclick="sendVolumeCommand(25)">🔊 Set 25%</button>
-            <button onclick="sendVolumeCommand(50)">🔊 Set 50%</button>
-            <button onclick="sendVolumeCommand(75)">🔊 Set 75%</button>
+            <h3>Volume Controls</h3>
+            <button onclick="sendProtobufCommand('VOLUME', 'VOLUME_UP')">Volume UP</button>
+            <button onclick="sendProtobufCommand('VOLUME', 'VOLUME_DOWN')">Volume DOWN</button>
+            <button onclick="sendProtobufCommand('VOLUME', 'VOLUME_MUTE')">Mute</button>
+            <button onclick="sendVolumeCommand(25)">Set 25%</button>
+            <button onclick="sendVolumeCommand(50)">Set 50%</button>
+            <button onclick="sendVolumeCommand(75)">Set 75%</button>
         </div>
 
         <div class="control-group">
-            <h3>⚙️ System Controls</h3>
-            <button onclick="sendCommand('system','screen_on')">💡 Wake Screen</button>
-            <button onclick="sendCommand('system','restart_app')">🔄 Restart App</button>
+            <h3>System Controls</h3>
+            <button onclick="sendProtobufCommand('SYSTEM', 'SYSTEM_SCREEN_ON')">Wake Screen</button>
+            <button onclick="sendProtobufCommand('SYSTEM', 'SYSTEM_RESTART_APP')">Restart App</button>
         </div>
 
-        <div class="control-group">
-            <h3>📱 Notifications</h3>
-            <button onclick="sendNotification('Hello from Dashboard!', 'Remote control test')">📱 Send Hello</button>
-            <button onclick="sendNotification('Command Test', 'Testing remote commands')">📱 Send Test</button>
-        </div>
     </div>
 
-    <!-- Command Response Log -->
-    <div class="response-log">
-        <h3>📬 Command Responses</h3>
-        <div id="responseLog">
-            <div class="no-data">No responses yet...</div>
-        </div>
-    </div>
-
-    <!-- Logs Section -->
     <div class="logs-container">
-        <div class="logs-header">
-            <h3>📋 MQTT Message Logs</h3>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 2px solid #f0f0f0;">
+            <h3>MQTT Protobuf Logs</h3>
             <button class="clear-btn" onclick="clearLogs()">Clear Logs</button>
         </div>
         <div id="mqttLogs">
             <div class="no-data">No messages received yet...</div>
         </div>
     </div>
+
 </div>
 
 <script>
-    // MQTT Configuration
     const MQTT_BROKER = "broker.hivemq.com";
     const MQTT_PORT = 8000;
     const CLIENT_ID = "WebDashboard_" + Math.random().toString(36).substr(2, 9);
 
     let client;
     let messageCount = 0;
-    let deviceMessageCount = 0;
-    let batteryMessageCount = 0;
-    let sensorMessageCount = 0;
+    let commandsSent = 0;
+    let responsesReceived = 0;
+    let totalDataSaved = 0;
     let connectedDevices = new Set();
     let selectedDeviceId = null;
 
-    // Initialize MQTT connection
+    // Protobuf Command Type Mappings
+    const CommandType = {
+        FLASHLIGHT: 0,
+        CAMERA: 1,
+        VIBRATE: 2,
+        VOLUME: 3,
+        SYSTEM: 4,
+        NOTIFICATION: 5
+    };
+
+    const FlashlightAction = {
+        FLASHLIGHT_ON: 0,
+        FLASHLIGHT_OFF: 1,
+        FLASHLIGHT_TOGGLE: 2
+    };
+
+    const CameraAction = {
+        CAMERA_OPEN: 0,
+        CAMERA_TAKE_PHOTO: 1
+    };
+
+    const VibrateAction = {
+        VIBRATE_SHORT: 0,
+        VIBRATE_LONG: 1,
+        VIBRATE_PATTERN: 2
+    };
+
+    const VolumeAction = {
+        VOLUME_UP: 0,
+        VOLUME_DOWN: 1,
+        VOLUME_MUTE: 2,
+        VOLUME_SET: 3
+    };
+
+    const SystemAction = {
+        SYSTEM_SCREEN_ON: 0,
+        SYSTEM_RESTART_APP: 1
+    };
+
+    const NotificationAction = {
+        NOTIFICATION_SHOW: 0
+    };
+
+    // Protocol Buffer field mappings (same as before for telemetry)
+    const DEVICE_INFO_FIELDS = {
+        1: 'device_id', 2: 'model', 3: 'manufacturer', 4: 'android_version', 5: 'api_level',
+        6: 'total_memory', 7: 'free_memory', 8: 'used_memory', 9: 'wifi_signal_strength',
+        10: 'wifi_ssid', 11: 'network_operator', 12: 'network_type', 13: 'timestamp'
+    };
+
+    const BATTERY_DATA_FIELDS = {
+        1: 'level', 2: 'is_charging', 3: 'voltage', 4: 'temperature', 5: 'timestamp'
+    };
+
+    const SENSOR_DATA_FIELDS = {
+        1: 'ambient_temperature', 2: 'accelerometer_x', 3: 'accelerometer_y', 4: 'accelerometer_z',
+        5: 'gyroscope_x', 6: 'gyroscope_y', 7: 'gyroscope_z', 8: 'timestamp'
+    };
+
+    const COMMAND_RESPONSE_FIELDS = {
+        1: 'success', 2: 'message', 3: 'original_command_type', 4: 'device_id', 5: 'timestamp', 6: 'error_details'
+    };
+
     function connectMQTT() {
         updateConnectionStatus("Connecting to MQTT...", false);
-        console.log("🔌 Connecting to MQTT:", MQTT_BROKER + ":" + MQTT_PORT);
+        console.log("Connecting to MQTT (Full Protobuf Mode):", MQTT_BROKER + ":" + MQTT_PORT);
 
         try {
             client = new Paho.MQTT.Client(MQTT_BROKER, MQTT_PORT, "/mqtt", CLIENT_ID);
 
             client.onConnectionLost = function(responseObject) {
-                console.log("❌ Connection lost:", responseObject);
+                console.log("Connection lost:", responseObject);
                 if (responseObject.errorCode !== 0) {
                     updateConnectionStatus("Connection Lost: " + responseObject.errorMessage, false);
                     setTimeout(connectMQTT, 5000);
@@ -580,8 +587,7 @@
             };
 
             client.onMessageArrived = function(message) {
-                console.log("📨 Message received:", message.destinationName, message.payloadString);
-                handleMessage(message.destinationName, message.payloadString);
+                handleMessage(message.destinationName, message.payloadBytes || message.payloadString);
             };
 
             const connectOptions = {
@@ -590,12 +596,11 @@
                 cleanSession: true,
                 useSSL: false,
                 onSuccess: function() {
-                    console.log("✅ MQTT Connected successfully!");
-                    updateConnectionStatus("Connected to " + MQTT_BROKER, true);
+                    updateConnectionStatus("Connected", true);
                     subscribeToTopics();
                 },
                 onFailure: function(error) {
-                    console.error("❌ MQTT Connection failed:", error);
+                    console.error("MQTT Connection failed:", error);
                     updateConnectionStatus("Connection Failed: " + error.errorMessage, false);
                     setTimeout(connectMQTT, 5000);
                 }
@@ -604,20 +609,19 @@
             client.connect(connectOptions);
 
         } catch(e) {
-            console.error("❌ MQTT Error:", e);
+            console.error("MQTT Error:", e);
             updateConnectionStatus("MQTT Error: " + e.message, false);
         }
     }
 
     function subscribeToTopics() {
-        // Subscribe to telemetry data
+        // Subscribe to telemetry (protobuf)
         client.subscribe("telemetry/+");
 
-        // Subscribe to ALL command responses (wildcard for any device)
-        client.subscribe("response/+/command");
+        // Subscribe to command responses (protobuf)
+        client.subscribe("response/+/protobuf");
 
-        console.log("📡 Subscribed to telemetry and response topics");
-        addLogEntry("System", "Subscribed to topics: telemetry/+, response/+/command");
+        addLogEntry("System", "Connected & subscribed to protobuf topics");
     }
 
     function updateConnectionStatus(status, connected) {
@@ -635,47 +639,202 @@
         document.getElementById('msgCount').textContent = messageCount;
         document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
 
-        console.log("🔥 Processing message:", topic);
 
+        // All messages should be protobuf now
+        if (payload instanceof Uint8Array || payload instanceof ArrayBuffer) {
+            handleProtobufMessage(topic, payload);
+        } else {
+            addLogEntry(topic, "Unexpected string message: " + payload);
+        }
+    }
+
+    function handleProtobufMessage(topic, payload) {
         try {
-            const data = JSON.parse(payload);
-            console.log("📊 Parsed data:", data);
+            const bytes = payload instanceof ArrayBuffer ? new Uint8Array(payload) : payload;
 
-            // Check if this is a command response
-            if (topic.startsWith("response/") && topic.endsWith("/command")) {
-                handleCommandResponse(topic, data);
-                return;
+            let data = null;
+            let fieldMapping = null;
+
+            // Determine message type by topic
+            if (topic === "telemetry/device") {
+                fieldMapping = DEVICE_INFO_FIELDS;
+            } else if (topic === "telemetry/battery") {
+                fieldMapping = BATTERY_DATA_FIELDS;
+            } else if (topic === "telemetry/sensors") {
+                fieldMapping = SENSOR_DATA_FIELDS;
+            } else if (topic.startsWith("response/") && topic.endsWith("/protobuf")) {
+                fieldMapping = COMMAND_RESPONSE_FIELDS;
             }
 
-            // Extract device ID from telemetry messages
-            if (topic.startsWith("telemetry/")) {
-                extractDeviceInfo(data);
-                processMessageData(topic, data);
+            if (fieldMapping) {
+                data = decodeProtobufMessage(bytes, fieldMapping);
+
+                if (data) {
+
+                    // Handle command responses
+                    if (topic.startsWith("response/")) {
+                        handleCommandResponse(data);
+                        responsesReceived++;
+                        document.getElementById('responsesReceived').textContent = responsesReceived;
+                    } else {
+                        // Handle telemetry
+                        extractDeviceInfo(data);
+                        processMessageData(topic, data);
+                    }
+
+                    // Calculate data savings
+                    const jsonSize = JSON.stringify(data).length;
+                    const saved = Math.max(0, jsonSize - bytes.length);
+                    totalDataSaved += saved;
+                    document.getElementById('dataSaved').textContent = Math.round(totalDataSaved / 1024) + ' KB';
+
+                    addLogEntry(topic, `Protobuf (${bytes.length} bytes): ` + JSON.stringify(data, null, 2));
+                } else {
+                    addLogEntry(topic, `Failed to decode protobuf (${bytes.length} bytes)`);
+                }
+            } else {
+                addLogEntry(topic, ` Unknown protobuf message type (${bytes.length} bytes)`);
             }
 
-            addLogEntry(topic, JSON.stringify(data, null, 2));
+        } catch (e) {
+            console.error("Protobuf decode error:", e);
+            addLogEntry(topic, `Protobuf decode error: ${e.message}`);
+        }
+    }
 
-        } catch(e) {
-            console.log("❌ JSON Parse error:", e);
-            addLogEntry(topic, "Binary/Invalid data: " + payload.length + " bytes");
+    function handleCommandResponse(data) {
+
+        const status = data.success ? "SUCCESS" : "ERROR";
+        const message = data.message || "No message";
+        const deviceId = data.device_id || "Unknown";
+
+        addLogEntry(`Response from ${deviceId}`, `${status}: ${message}`);
+
+        // Optional: Show notification
+        if (!data.success && data.error_details) {
+            console.error("Command failed:", data.error_details);
+        }
+    }
+
+    // Enhanced Protobuf decoder (same as before)
+    function decodeProtobufMessage(bytes, fieldMapping) {
+        try {
+            const result = {};
+            let pos = 0;
+
+            while (pos < bytes.length) {
+                if (pos >= bytes.length - 1) break;
+
+                const tag = bytes[pos++];
+                const fieldNum = tag >> 3;
+                const wireType = tag & 0x07;
+
+                if (wireType === 0) { // Varint
+                    const value = readVarint(bytes, pos);
+                    pos = value.pos;
+
+                    const fieldName = fieldMapping[fieldNum];
+                    if (fieldName) {
+                        if (fieldName === 'is_charging' || fieldName === 'success') {
+                            result[fieldName] = value.value !== 0;
+                        } else {
+                            result[fieldName] = value.value;
+                        }
+                    }
+
+                } else if (wireType === 1) { // 64-bit
+                    if (pos + 8 <= bytes.length) {
+                        const value = readDouble(bytes, pos);
+                        const fieldName = fieldMapping[fieldNum];
+                        if (fieldName) {
+                            result[fieldName] = value;
+                        }
+                        pos += 8;
+                    } else break;
+
+                } else if (wireType === 2) { // Length-delimited
+                    const length = readVarint(bytes, pos);
+                    pos = length.pos;
+                    if (pos + length.value <= bytes.length) {
+                        const stringValue = decodeString(bytes.slice(pos, pos + length.value));
+                        const fieldName = fieldMapping[fieldNum];
+                        if (fieldName) {
+                            result[fieldName] = stringValue;
+                        }
+                        pos += length.value;
+                    } else break;
+
+                } else if (wireType === 5) { // 32-bit
+                    if (pos + 4 <= bytes.length) {
+                        const value = readFloat(bytes, pos);
+                        const fieldName = fieldMapping[fieldNum];
+                        if (fieldName) {
+                            result[fieldName] = value;
+                        }
+                        pos += 4;
+                    } else break;
+                } else {
+                    console.log("Unknown wire type:", wireType);
+                    break;
+                }
+            }
+
+            return Object.keys(result).length > 0 ? result : null;
+
+        } catch (e) {
+            console.error("Protobuf decode error:", e);
+            return null;
+        }
+    }
+
+    function readVarint(bytes, pos) {
+        let value = 0;
+        let shift = 0;
+
+        while (pos < bytes.length) {
+            const byte = bytes[pos++];
+            value |= (byte & 0x7F) << shift;
+            if ((byte & 0x80) === 0) break;
+            shift += 7;
+            if (shift >= 64) break;
+        }
+
+        return { value, pos };
+    }
+
+    function readFloat(bytes, pos) {
+        const buffer = new ArrayBuffer(4);
+        const view = new DataView(buffer);
+        for (let i = 0; i < 4; i++) {
+            view.setUint8(i, bytes[pos + i]);
+        }
+        return view.getFloat32(0, true);
+    }
+
+    function readDouble(bytes, pos) {
+        const buffer = new ArrayBuffer(8);
+        const view = new DataView(buffer);
+        for (let i = 0; i < 8; i++) {
+            view.setUint8(i, bytes[pos + i]);
+        }
+        return view.getFloat64(0, true);
+    }
+
+    function decodeString(bytes) {
+        try {
+            return new TextDecoder('utf-8').decode(bytes);
+        } catch (e) {
+            return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
         }
     }
 
     function extractDeviceInfo(data) {
-        // Try to extract device ID from various message types
-        let deviceId = null;
-
-        if (data.device_id) {
-            deviceId = data.device_id;
-        } else if (data.clientId) {
-            deviceId = data.clientId;
-        }
+        let deviceId = data.device_id;
 
         if (deviceId && !connectedDevices.has(deviceId)) {
             connectedDevices.add(deviceId);
             updateDeviceSelector();
 
-            // Auto-select first device if none selected
             if (!selectedDeviceId) {
                 selectedDeviceId = deviceId;
                 document.getElementById('deviceSelect').value = deviceId;
@@ -687,12 +846,10 @@
     function updateDeviceSelector() {
         const select = document.getElementById('deviceSelect');
 
-        // Clear existing options except first one
         while (select.children.length > 1) {
             select.removeChild(select.lastChild);
         }
 
-        // Add connected devices
         connectedDevices.forEach(deviceId => {
             const option = document.createElement('option');
             option.value = deviceId;
@@ -712,50 +869,18 @@
         }
     }
 
-    // Device selector change handler
     document.getElementById('deviceSelect').addEventListener('change', updateSelectedDevice);
-
-    function handleCommandResponse(topic, data) {
-        console.log("📬 Command response received:", data);
-
-        const responseContainer = document.getElementById('responseLog');
-        if (responseContainer.innerHTML.includes('No responses yet')) {
-            responseContainer.innerHTML = '';
-        }
-
-        const responseEntry = document.createElement('div');
-        responseEntry.className = 'response-entry' + (data.status === 'error' ? ' error' : '');
-        responseEntry.innerHTML = `
-            <strong>${new Date().toLocaleTimeString()}</strong> -
-            Status: <strong>${data.status}</strong> -
-            ${data.message}
-            <small>(${data.original_topic})</small>
-        `;
-
-        responseContainer.insertBefore(responseEntry, responseContainer.firstChild);
-
-        // Keep only last 20 responses
-        while (responseContainer.children.length > 20) {
-            responseContainer.removeChild(responseContainer.lastChild);
-        }
-    }
 
     function processMessageData(topic, data) {
         switch(topic) {
             case "telemetry/device":
                 handleDeviceData(data);
-                deviceMessageCount++;
-                document.getElementById('deviceMsgCount').textContent = deviceMessageCount;
                 break;
             case "telemetry/battery":
                 handleBatteryData(data);
-                batteryMessageCount++;
-                document.getElementById('batteryMsgCount').textContent = batteryMessageCount;
                 break;
             case "telemetry/sensors":
                 handleSensorData(data);
-                sensorMessageCount++;
-                document.getElementById('sensorMsgCount').textContent = sensorMessageCount;
                 break;
         }
     }
@@ -788,17 +913,78 @@
 
     function handleBatteryData(data) {
         document.getElementById('batteryLevel').textContent = Math.round(data.level) + '%';
-        document.getElementById('isCharging').textContent = data.is_charging ? '⚡ Yes' : '🔌 No';
+        document.getElementById('isCharging').textContent = data.is_charging ? '⚡ Yes' : 'No';
         document.getElementById('batteryVoltage').textContent = data.voltage + ' mV';
         document.getElementById('batteryTemp').textContent = data.temperature.toFixed(1) + '°C';
         document.getElementById('batteryProgress').style.width = data.level + '%';
     }
 
     function handleSensorData(data) {
-        document.getElementById('ambientTemp').textContent = data.ambient_temperature.toFixed(1) + '°C';
-        document.getElementById('accelX').textContent = data.accelerometer_x.toFixed(2) + ' m/s²';
-        document.getElementById('accelY').textContent = data.accelerometer_y.toFixed(2) + ' m/s²';
-        document.getElementById('accelZ').textContent = data.accelerometer_z.toFixed(2) + ' m/s²';
+
+        // SAFE HANDLING SA DEFAULT VREDNOSTIMA
+        const ambientTemp = data.ambient_temperature || 0;
+        const accelX = data.accelerometer_x || 0;
+        const accelY = data.accelerometer_y || 0;
+        const accelZ = data.accelerometer_z || 0;
+        const gyroX = data.gyroscope_x || 0;
+        const gyroY = data.gyroscope_y || 0;
+        const gyroZ = data.gyroscope_z || 0;
+
+        // SAFE toFixed() CALLS
+        try {
+            document.getElementById('ambientTemp').textContent =
+                (typeof ambientTemp === 'number' && !isNaN(ambientTemp))
+                    ? ambientTemp.toFixed(1) + '°C'
+                    : 'N/A';
+
+            document.getElementById('accelX').textContent =
+                (typeof accelX === 'number' && !isNaN(accelX))
+                    ? accelX.toFixed(2) + ' m/s²'
+                    : 'N/A';
+
+            document.getElementById('accelY').textContent =
+                (typeof accelY === 'number' && !isNaN(accelY))
+                    ? accelY.toFixed(2) + ' m/s²'
+                    : 'N/A';
+
+            document.getElementById('accelZ').textContent =
+                (typeof accelZ === 'number' && !isNaN(accelZ))
+                    ? accelZ.toFixed(2) + ' m/s²'
+                    : 'N/A';
+
+            // Opciono: dodaj gyroscope podatke ako imaš UI elemente
+            if (document.getElementById('gyroX')) {
+                document.getElementById('gyroX').textContent =
+                    (typeof gyroX === 'number' && !isNaN(gyroX))
+                        ? gyroX.toFixed(3) + ' rad/s'
+                        : 'N/A';
+            }
+
+            if (document.getElementById('gyroY')) {
+                document.getElementById('gyroY').textContent =
+                    (typeof gyroY === 'number' && !isNaN(gyroY))
+                        ? gyroY.toFixed(3) + ' rad/s'
+                        : 'N/A';
+            }
+
+            if (document.getElementById('gyroZ')) {
+                document.getElementById('gyroZ').textContent =
+                    (typeof gyroZ === 'number' && !isNaN(gyroZ))
+                        ? gyroZ.toFixed(3) + ' rad/s'
+                        : 'N/A';
+            }
+
+
+        } catch (error) {
+            console.error("Error updating sensor UI:", error);
+
+
+            // Fallback values
+            document.getElementById('ambientTemp').textContent = 'Error';
+            document.getElementById('accelX').textContent = 'Error';
+            document.getElementById('accelY').textContent = 'Error';
+            document.getElementById('accelZ').textContent = 'Error';
+        }
     }
 
     function addLogEntry(topic, data) {
@@ -810,16 +996,19 @@
         }
 
         const logEntry = document.createElement('div');
-        logEntry.className = 'log-entry';
+        logEntry.className = 'log-entry protobuf';
+
         logEntry.innerHTML = `
-            <div class="log-timestamp">${timestamp}</div>
-            <div class="log-topic">${topic}</div>
-            <pre style="margin: 5px 0; font-size: 0.8em; white-space: pre-wrap;">${data}</pre>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span style="color: #666; font-size: 0.8em;">${timestamp}</span>
+                <span style="background: #28a745; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.7em;">PROTOBUF</span>
+            </div>
+            <div style="font-weight: bold; color: #007bff; margin: 5px 0;">${topic}</div>
+            <pre style="margin: 5px 0; font-size: 0.8em; white-space: pre-wrap; max-height: 100px; overflow-y: auto;">${data}</pre>
         `;
 
         logsContainer.insertBefore(logEntry, logsContainer.firstChild);
 
-        // Keep only last 50 log entries
         while (logsContainer.children.length > 50) {
             logsContainer.removeChild(logsContainer.lastChild);
         }
@@ -827,131 +1016,243 @@
 
     function clearLogs() {
         document.getElementById('mqttLogs').innerHTML = '<div class="no-data">Logs cleared...</div>';
-        document.getElementById('responseLog').innerHTML = '<div class="no-data">No responses yet...</div>';
     }
 
-    // FIXED COMMAND FUNCTIONS - NOW USING CORRECT TOPICS AND FORMATS!
-    function sendCommand(commandType, action) {
+
+    function sendProtobufCommand(commandType, action) {
         if (!selectedDeviceId) {
-            alert("❌ No device selected! Please select a target device first.");
+            alert("No device selected! Please select a target device first.");
             return;
         }
 
         if (!client || !client.isConnected) {
-            alert("❌ MQTT not connected! Please wait for connection.");
+            alert("MQTT not connected! Please wait for connection.");
             return;
         }
 
         try {
-            // Create command payload in the format Android expects
-            const commandPayload = {
-                action: action
-            };
+            const commandBytes = createProtobufCommand(commandType, action, selectedDeviceId);
 
-            // Create MQTT message
-            const message = new Paho.MQTT.Message(JSON.stringify(commandPayload));
-
-            // Send to the correct topic format that Android expects
-            const topic = `command/${selectedDeviceId}/${commandType}`;
-            message.destinationName = topic;
-            message.qos = 1; // Ensure delivery
-
-            console.log(`🚀 Sending command: ${topic} -> ${JSON.stringify(commandPayload)}`);
-
-            client.send(message);
-
-            // Log the sent command
-            addLogEntry(`📤 SENT: ${topic}`, JSON.stringify(commandPayload, null, 2));
-
-            // Add to response log
-            const responseContainer = document.getElementById('responseLog');
-            if (responseContainer.innerHTML.includes('No responses yet')) {
-                responseContainer.innerHTML = '';
-            }
-
-            const sentEntry = document.createElement('div');
-            sentEntry.className = 'response-entry';
-            sentEntry.style.background = '#e8f4fd';
-            sentEntry.innerHTML = `
-                <strong>${new Date().toLocaleTimeString()}</strong> -
-                📤 SENT: <strong>${commandType}</strong> -> <strong>${action}</strong>
-                <small>(to ${selectedDeviceId})</small>
-            `;
-            responseContainer.insertBefore(sentEntry, responseContainer.firstChild);
-
-        } catch (error) {
-            console.error("❌ Command send error:", error);
-            alert(`❌ Failed to send command: ${error.message}`);
-        }
-    }
-
-    // Special function for volume commands with level
-    function sendVolumeCommand(level) {
-        if (!selectedDeviceId) {
-            alert("❌ No device selected! Please select a target device first.");
-            return;
-        }
-
-        if (!client || !client.isConnected) {
-            alert("❌ MQTT not connected! Please wait for connection.");
-            return;
-        }
-
-        try {
-            const commandPayload = {
-                action: "set",
-                level: level
-            };
-
-            const message = new Paho.MQTT.Message(JSON.stringify(commandPayload));
-            const topic = `command/${selectedDeviceId}/volume`;
+            const message = new Paho.MQTT.Message(commandBytes);
+            const topic = `command/${selectedDeviceId}/protobuf`;
             message.destinationName = topic;
             message.qos = 1;
 
-            console.log(`🚀 Sending volume command: ${topic} -> ${JSON.stringify(commandPayload)}`);
+            console.log(`Sending Protobuf command: ${topic} -> ${commandType}:${action} (${commandBytes.length} bytes)`);
 
             client.send(message);
-            addLogEntry(`📤 SENT: ${topic}`, JSON.stringify(commandPayload, null, 2));
+
+            commandsSent++;
+            document.getElementById('commandsSent').textContent = commandsSent;
+
+            addLogEntry(`SENT: ${topic}`, `${commandType} -> ${action} (${commandBytes.length} bytes)`);
 
         } catch (error) {
-            console.error("❌ Volume command error:", error);
-            alert(`❌ Failed to send volume command: ${error.message}`);
+            console.error("Protobuf command send error:", error);
+            alert(`Failed to send command: ${error.message}`);
         }
     }
 
-    // Special function for notifications
-    function sendNotification(title, message) {
+    function sendVolumeCommand(level) {
         if (!selectedDeviceId) {
-            alert("❌ No device selected! Please select a target device first.");
-            return;
-        }
-
-        if (!client || !client.isConnected) {
-            alert("❌ MQTT not connected! Please wait for connection.");
+            alert("No device selected!");
             return;
         }
 
         try {
-            const commandPayload = {
-                action: "show",
-                title: title,
-                message: message
-            };
+            const commandBytes = createVolumeProtobufCommand(selectedDeviceId, level);
 
-            const mqttMessage = new Paho.MQTT.Message(JSON.stringify(commandPayload));
-            const topic = `command/${selectedDeviceId}/notification`;
+            const message = new Paho.MQTT.Message(commandBytes);
+            const topic = `command/${selectedDeviceId}/protobuf`;
+            message.destinationName = topic;
+            message.qos = 1;
+
+            client.send(message);
+
+            commandsSent++;
+            document.getElementById('commandsSent').textContent = commandsSent;
+
+            addLogEntry(`SENT: ${topic}`, `VOLUME -> SET:${level}% (${commandBytes.length} bytes)`);
+
+        } catch (error) {
+            console.error("Volume command error:", error);
+        }
+    }
+
+    function sendNotificationCommand(title, message) {
+        if (!selectedDeviceId) {
+            alert("No device selected!");
+            return;
+        }
+
+        try {
+            const commandBytes = createNotificationProtobufCommand(selectedDeviceId, title, message);
+
+            const mqttMessage = new Paho.MQTT.Message(commandBytes);
+            const topic = `command/${selectedDeviceId}/protobuf`;
             mqttMessage.destinationName = topic;
             mqttMessage.qos = 1;
 
-            console.log(`🚀 Sending notification: ${topic} -> ${JSON.stringify(commandPayload)}`);
-
             client.send(mqttMessage);
-            addLogEntry(`📤 SENT: ${topic}`, JSON.stringify(commandPayload, null, 2));
+
+            commandsSent++;
+            document.getElementById('commandsSent').textContent = commandsSent;
+
+            addLogEntry(`SENT: ${topic}`, `NOTIFICATION -> "${title}: ${message}" (${commandBytes.length} bytes)`);
 
         } catch (error) {
-            console.error("❌ Notification send error:", error);
-            alert(`❌ Failed to send notification: ${error.message}`);
+            console.error("Notification send error:", error);
         }
+    }
+
+    // 🛠️ PROTOBUF COMMAND CREATION FUNCTIONS
+
+    function createProtobufCommand(commandType, action, deviceId) {
+        // Simple protobuf encoding for Command message
+        const buffer = [];
+
+        // Field 1: type (varint)
+        writeVarint(buffer, (1 << 3) | 0); // field 1, wire type 0
+        writeVarint(buffer, CommandType[commandType]);
+
+        // Field 2: timestamp (varint)
+        writeVarint(buffer, (2 << 3) | 0);
+        writeVarint(buffer, Date.now());
+
+        // Field 3: device_id (string)
+        writeVarint(buffer, (3 << 3) | 2); // field 3, wire type 2
+        writeString(buffer, deviceId);
+
+        // Field 10-15: specific command data (oneof)
+        const commandField = getCommandFieldNumber(commandType);
+        if (commandField) {
+            writeVarint(buffer, (commandField << 3) | 2); // wire type 2 for message
+
+            const actionBytes = createActionMessage(commandType, action);
+            writeVarint(buffer, actionBytes.length);
+            buffer.push(...actionBytes);
+        }
+
+        return new Uint8Array(buffer);
+    }
+
+    function createVolumeProtobufCommand(deviceId, level) {
+        const buffer = [];
+
+        // Command header
+        writeVarint(buffer, (1 << 3) | 0); // type
+        writeVarint(buffer, CommandType.VOLUME);
+
+        writeVarint(buffer, (2 << 3) | 0); // timestamp
+        writeVarint(buffer, Date.now());
+
+        writeVarint(buffer, (3 << 3) | 2); // device_id
+        writeString(buffer, deviceId);
+
+        // Volume command (field 13)
+        writeVarint(buffer, (13 << 3) | 2);
+
+        const volumeBytes = [];
+        writeVarint(volumeBytes, (1 << 3) | 0); // action
+        writeVarint(volumeBytes, VolumeAction.VOLUME_SET);
+        writeVarint(volumeBytes, (2 << 3) | 0); // volume_level
+        writeVarint(volumeBytes, level);
+
+        writeVarint(buffer, volumeBytes.length);
+        buffer.push(...volumeBytes);
+
+        return new Uint8Array(buffer);
+    }
+
+    function createNotificationProtobufCommand(deviceId, title, message) {
+        const buffer = [];
+
+        // Command header
+        writeVarint(buffer, (1 << 3) | 0); // type
+        writeVarint(buffer, CommandType.NOTIFICATION);
+
+        writeVarint(buffer, (2 << 3) | 0); // timestamp
+        writeVarint(buffer, Date.now());
+
+        writeVarint(buffer, (3 << 3) | 2); // device_id
+        writeString(buffer, deviceId);
+
+        // Notification command (field 15)
+        writeVarint(buffer, (15 << 3) | 2);
+
+        const notificationBytes = [];
+        writeVarint(notificationBytes, (1 << 3) | 0); // action
+        writeVarint(notificationBytes, NotificationAction.NOTIFICATION_SHOW);
+        writeVarint(notificationBytes, (2 << 3) | 2); // title
+        writeString(notificationBytes, title);
+        writeVarint(notificationBytes, (3 << 3) | 2); // message
+        writeString(notificationBytes, message);
+
+        writeVarint(buffer, notificationBytes.length);
+        buffer.push(...notificationBytes);
+
+        return new Uint8Array(buffer);
+    }
+
+    function getCommandFieldNumber(commandType) {
+        const fieldMap = {
+            'FLASHLIGHT': 10,
+            'CAMERA': 11,
+            'VIBRATE': 12,
+            'VOLUME': 13,
+            'SYSTEM': 14,
+            'NOTIFICATION': 15
+        };
+        return fieldMap[commandType];
+    }
+
+    function createActionMessage(commandType, action) {
+        const buffer = [];
+
+        // Field 1: action (varint)
+        writeVarint(buffer, (1 << 3) | 0);
+
+        let actionValue;
+        switch(commandType) {
+            case 'FLASHLIGHT':
+                actionValue = FlashlightAction[action];
+                break;
+            case 'CAMERA':
+                actionValue = CameraAction[action];
+                break;
+            case 'VIBRATE':
+                actionValue = VibrateAction[action];
+                break;
+            case 'VOLUME':
+                actionValue = VolumeAction[action];
+                break;
+            case 'SYSTEM':
+                actionValue = SystemAction[action];
+                break;
+            case 'NOTIFICATION':
+                actionValue = NotificationAction[action];
+                break;
+            default:
+                actionValue = 0;
+        }
+
+        writeVarint(buffer, actionValue);
+        return buffer;
+    }
+
+    // Protobuf encoding helpers
+    function writeVarint(buffer, value) {
+        while (value >= 0x80) {
+            buffer.push((value & 0xFF) | 0x80);
+            value >>>= 7;
+        }
+        buffer.push(value & 0xFF);
+    }
+
+    function writeString(buffer, str) {
+        const bytes = new TextEncoder().encode(str);
+        writeVarint(buffer, bytes.length);
+        buffer.push(...bytes);
     }
 
     // Initialize on page load

@@ -3,19 +3,23 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <!-- Internet permisije za MQTT -->
+    <uses-feature
+        android:name="android.hardware.camera"
+        android:required="false" />
+
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
-    <!-- WiFi informacije -->
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
-    <!-- Telefon informacije -->
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
-
-    <!-- Wake lock za MQTT -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.CAMERA" />
+
+
 
     <!-- Baterija permisije (implicitne za broadcast receiver) -->
 
@@ -40,7 +44,6 @@
             </intent-filter>
         </activity>
 
-        <!-- MQTT Service -->
         <service android:name="org.eclipse.paho.android.service.MqttService" />
 
     </application>

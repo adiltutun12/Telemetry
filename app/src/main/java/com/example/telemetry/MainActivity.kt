@@ -28,7 +28,6 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.*
 import org.eclipse.paho.client.mqttv3.*
-import org.json.JSONObject
 import java.util.*
 
 class MainActivity : AppCompatActivity(), SensorEventListener {
@@ -49,7 +48,6 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     private var accelerometerData = FloatArray(3)
     private var gyroscopeData = FloatArray(3)
 
-    // REMOTE CONTROL KOMPONENTE - DODANO!
     private lateinit var cameraManager: CameraManager
     private var flashlightOn = false
     private var cameraId: String? = null
@@ -57,7 +55,6 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     private lateinit var audioManager: AudioManager
     private lateinit var powerManager: PowerManager
 
-    // UI elementi
     private var batteryStatusText: TextView? = null
     private var temperatureStatusText: TextView? = null
     private var wifiStatusText: TextView? = null
@@ -82,7 +79,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
                     batteryStatusText?.text = "${batteryPct.toInt()}% ${if (isCharging) "⚡" else "🔌"}"
                 }
 
-                sendBatteryData(batteryPct, isCharging, voltage, temperature / 10f)
+                sendBatteryDataProtobuf(batteryPct, isCharging, voltage, temperature / 10f)
             }
         }
     }
@@ -115,13 +112,11 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
     private fun initializeRemoteControl() {
         try {
-            // Inicijalizuj komponente za remote control
             cameraManager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
             vibrator = getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
             audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
             powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
 
-            // Dobij camera ID za flashlight
             try {
                 val cameraIdList = cameraManager.cameraIdList
                 for (id in cameraIdList) {
@@ -132,13 +127,9 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
                         break
                     }
                 }
-            } catch (e: Exception) {
-                println("❌ Camera initialization error: ${e.message}")
-            }
+            } catch (e: Exception) { }
 
-            println("✅ Remote control components initialized")
         } catch (e: Exception) {
-            println("❌ Remote control initialization failed: ${e.message}")
         }
     }
 
@@ -155,7 +146,6 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
             permissions.add(Manifest.permission.READ_PHONE_STATE)
         }
 
-        // REMOTE CONTROL PERMISIJE
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
             != PackageManager.PERMISSION_GRANTED) {
             permissions.add(Manifest.permission.CAMERA)
@@ -195,7 +185,6 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     private fun initializeMqtt() {
         telemetryScope.launch {
             try {
-                println("🔌 Initializing MQTT connection...")
 
                 mqttClient = MqttClient(mqttBroker, clientId, null)
                 val options = MqttConnectOptions().apply {
@@ -205,41 +194,31 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
                     isAutomaticReconnect = true
                 }
 
-                println("🚀 Attempting to connect to: $mqttBroker")
                 mqttClient?.connect(options)
 
-                // ČEKAJ DA SE POVEŽE
                 var attempts = 0
                 while (attempts < 10) {
                     if (mqttClient?.isConnected == true) {
                         runOnUiThread {
-                            mqttStatusText?.text = "✅ Connected"
-                            Toast.makeText(this@MainActivity, "MQTT Connected!", Toast.LENGTH_SHORT).show()
+                            mqttStatusText?.text = "Connected"
                         }
-                        println("✅ MQTT Successfully connected!")
 
-                        // SUBSCRIBE NA COMMAND TOPIC-E
                         subscribeToCommandTopics()
                         return@launch
                     }
                     delay(1000)
                     attempts++
-                    println("⏳ Waiting for connection... attempt $attempts/10")
                 }
 
-                // AKO NE USPE
                 throw Exception("Connection timeout after 10 seconds")
 
             } catch (e: Exception) {
-                println("❌ MQTT Connection failed: ${e.message}")
                 runOnUiThread {
-                    mqttStatusText?.text = "❌ Error: ${e.message}"
+                    mqttStatusText?.text = "Error: ${e.message}"
                     Toast.makeText(this@MainActivity, "MQTT Error: ${e.message}", Toast.LENGTH_LONG).show()
                 }
 
-                // RETRY POSLE 5 SEKUNDI
                 delay(5000)
-                println("🔄 Retrying MQTT connection...")
                 initializeMqtt()
             }
         }
@@ -250,10 +229,12 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
             try {
                 mqttClient?.let { client ->
                     if (client.isConnected) {
-                        // KORISTIMO Build.DEVICE umesto clientId!
-                        val deviceId = Build.DEVICE // ovo je "a21s"
+                        val deviceId = Build.DEVICE
 
-                        // Subscribe na command topic-e sa device_id
+                        // SUBSCRIBE NA PROTOBUF KOMANDE (prioritet)
+                        client.subscribe("command/${deviceId}/protobuf")
+
+                        // ZADRŽAVAMO I JSON KOMANDE ZA KOMPATIBILNOST
                         client.subscribe("command/${deviceId}/flashlight")
                         client.subscribe("command/${deviceId}/camera")
                         client.subscribe("command/${deviceId}/vibrate")
@@ -261,186 +242,323 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
                         client.subscribe("command/${deviceId}/system")
                         client.subscribe("command/${deviceId}/notification")
 
-                        println("✅ Subscribed to command topics with device_id: $deviceId")
 
-                        // Callback za primanje komandi
                         client.setCallback(object : MqttCallback {
                             override fun connectionLost(cause: Throwable?) {
-                                println("❌ MQTT connection lost: ${cause?.message}")
                             }
 
                             @RequiresPermission(Manifest.permission.VIBRATE)
                             override fun messageArrived(topic: String?, message: MqttMessage?) {
                                 if (topic != null && message != null) {
-                                    val payload = String(message.payload)
-                                    println("📨 Command received: $topic -> $payload")
-                                    handleRemoteCommand(topic, payload)
+
+                                    // DETERMINIŠI TIP PORUKE
+                                    if (topic.endsWith("/protobuf")) {
+                                        // PROTOBUF KOMANDA
+                                        handleProtobufCommand(message.payload)
+                                    }
                                 }
                             }
 
-                            override fun deliveryComplete(token: IMqttDeliveryToken?) {
-                                // Ne koristimo
-                            }
+                            override fun deliveryComplete(token: IMqttDeliveryToken?) {}
                         })
                     }
                 }
             } catch (e: Exception) {
-                println("❌ Command subscription error: ${e.message}")
             }
         }
     }
 
-    // HANDLE REMOTE COMMANDS
     @RequiresPermission(Manifest.permission.VIBRATE)
-    private fun handleRemoteCommand(topic: String, payload: String) {
-        println("🎮 Executing command: $topic -> $payload")
-
+    private fun handleProtobufCommand(payload: ByteArray) {
         try {
-            val command = JSONObject(payload)
-            val action = command.getString("action")
 
-            when {
-                topic.contains("flashlight") -> handleFlashlightCommand(action, command)
-                topic.contains("camera") -> handleCameraCommand(action, command)
-                topic.contains("vibrate") -> handleVibrateCommand(action, command)
-                topic.contains("volume") -> handleVolumeCommand(action, command)
-                topic.contains("system") -> handleSystemCommand(action, command)
-                topic.contains("notification") -> handleNotificationCommand(action, command)
-                else -> println("❓ Unknown command topic: $topic")
+            // MANUAL PROTOBUF PARSING (jednostavan approach)
+            val commandData = parseSimpleProtobufCommand(payload)
+
+            if (commandData != null) {
+
+                when (commandData.type) {
+                    0 -> { // FLASHLIGHT
+                        when (commandData.action) {
+                            0 -> handleFlashlightAction("on")
+                            1 -> handleFlashlightAction("off")
+                            2 -> handleFlashlightAction("toggle")
+                        }
+                    }
+                    1 -> { // CAMERA
+                        when (commandData.action) {
+                            0 -> handleCameraAction("open")
+                            1 -> handleCameraAction("take_photo")
+                        }
+                    }
+                    2 -> { // VIBRATE
+                        when (commandData.action) {
+                            0 -> handleVibrateAction("short")
+                            1 -> handleVibrateAction("long")
+                            2 -> handleVibrateAction("pattern")
+                        }
+                    }
+                    3 -> { // VOLUME
+                        when (commandData.action) {
+                            0 -> handleVolumeAction("up", 0)
+                            1 -> handleVolumeAction("down", 0)
+                            2 -> handleVolumeAction("mute", 0)
+                            3 -> handleVolumeAction("set", commandData.volumeLevel)
+                        }
+                    }
+                    4 -> { // SYSTEM
+                        when (commandData.action) {
+                            0 -> handleSystemAction("screen_on")
+                            1 -> handleSystemAction("restart_app")
+                        }
+                    }
+                    5 -> { // NOTIFICATION
+                        when (commandData.action) {
+                            0 -> handleNotificationAction(commandData.title ?: "Notification", commandData.message ?: "Command executed")
+                        }
+                    }
+                }
+
+                // Pošalji success response
+                sendCommandResponseProtobuf(true, "Protobuf command executed successfully: Type ${commandData.type}")
+
+            } else {
+                sendCommandResponseProtobuf(false, "Failed to parse Protobuf command")
             }
-
-            // Pošalji potvrdu
-            sendCommandResponse(topic, "success", "Command executed successfully")
 
         } catch (e: Exception) {
-            println("❌ Command execution error: ${e.message}")
-            sendCommandResponse(topic, "error", e.message ?: "Unknown error")
+            sendCommandResponseProtobuf(false, "Protobuf command execution failed: ${e.message}")
         }
     }
 
-    // FLASHLIGHT COMMANDS
-    private fun handleFlashlightCommand(action: String, command: JSONObject) {
+    // SIMPLE PROTOBUF PARSER (bez library-ja)
+    data class ProtobufCommandData(
+        val type: Int,
+        val action: Int,
+        val volumeLevel: Int = 0,
+        val title: String? = null,
+        val message: String? = null
+    )
+
+    private fun parseSimpleProtobufCommand(payload: ByteArray): ProtobufCommandData? {
+        try {
+            var pos = 0
+            var commandType = -1
+            var action = -1
+            var volumeLevel = 0
+            var title: String? = null
+            var message: String? = null
+
+            while (pos < payload.size) {
+                if (pos >= payload.size - 1) break
+
+                val tag = payload[pos++].toInt() and 0xFF
+                val fieldNum = tag shr 3
+                val wireType = tag and 0x07
+
+                when (fieldNum) {
+                    1 -> { // type field
+                        if (wireType == 0) {
+                            val result = readVarint(payload, pos)
+                            commandType = result.first
+                            pos = result.second
+                        }
+                    }
+                    10, 11, 12, 13, 14, 15 -> { // command data fields
+                        if (wireType == 2) { // length-delimited
+                            val lengthResult = readVarint(payload, pos)
+                            val length = lengthResult.first
+                            pos = lengthResult.second
+
+                            if (pos + length <= payload.size) {
+                                val subData = payload.sliceArray(pos until pos + length)
+                                action = parseActionFromSubData(subData)
+
+                                // Parse additional data for volume/notification
+                                if (fieldNum == 13) { // volume
+                                    volumeLevel = parseVolumeLevelFromSubData(subData)
+                                } else if (fieldNum == 15) { // notification
+                                    val notificationData = parseNotificationFromSubData(subData)
+                                    title = notificationData.first
+                                    message = notificationData.second
+                                }
+
+                                pos += length
+                            }
+                        }
+                    }
+                    else -> {
+                        // Skip unknown fields
+                        if (wireType == 0) {
+                            val result = readVarint(payload, pos)
+                            pos = result.second
+                        } else if (wireType == 2) {
+                            val lengthResult = readVarint(payload, pos)
+                            pos = lengthResult.second + lengthResult.first
+                        }
+                    }
+                }
+            }
+
+            return if (commandType >= 0 && action >= 0) {
+                ProtobufCommandData(commandType, action, volumeLevel, title, message)
+            } else null
+
+        } catch (e: Exception) {
+            return null
+        }
+    }
+
+    private fun readVarint(data: ByteArray, startPos: Int): Pair<Int, Int> {
+        var value = 0
+        var pos = startPos
+        var shift = 0
+
+        while (pos < data.size) {
+            val byte = data[pos++].toInt() and 0xFF
+            value = value or ((byte and 0x7F) shl shift)
+            if ((byte and 0x80) == 0) break
+            shift += 7
+            if (shift >= 32) break
+        }
+
+        return Pair(value, pos)
+    }
+
+    private fun parseActionFromSubData(data: ByteArray): Int {
+        if (data.size >= 2) {
+            val tag = data[0].toInt() and 0xFF
+            if ((tag shr 3) == 1 && (tag and 0x07) == 0) {
+                return data[1].toInt() and 0xFF
+            }
+        }
+        return 0
+    }
+
+    private fun parseVolumeLevelFromSubData(data: ByteArray): Int {
+        var pos = 0
+        var level = 0
+
+        while (pos < data.size - 1) {
+            val tag = data[pos++].toInt() and 0xFF
+            val fieldNum = tag shr 3
+
+            if (fieldNum == 2) { // volume_level field
+                level = data[pos].toInt() and 0xFF
+                break
+            }
+            pos++
+        }
+
+        return level
+    }
+
+    private fun parseNotificationFromSubData(data: ByteArray): Pair<String?, String?> {
+        var pos = 0
+        var title: String? = null
+        var message: String? = null
+
+        while (pos < data.size - 1) {
+            val tag = data[pos++].toInt() and 0xFF
+            val fieldNum = tag shr 3
+            val wireType = tag and 0x07
+
+            if (wireType == 2) { // string field
+                val lengthResult = readVarint(data, pos)
+                val length = lengthResult.first
+                pos = lengthResult.second
+
+                if (pos + length <= data.size) {
+                    val stringValue = String(data.sliceArray(pos until pos + length))
+
+                    when (fieldNum) {
+                        2 -> title = stringValue
+                        3 -> message = stringValue
+                    }
+
+                    pos += length
+                }
+            }
+        }
+
+        return Pair(title, message)
+    }
+
+    private fun handleFlashlightAction(action: String) {
         when (action) {
             "on" -> {
                 toggleFlashlight(true)
-                runOnUiThread {
-                    Toast.makeText(this, "🔦 Flashlight ON", Toast.LENGTH_SHORT).show()
-                }
             }
             "off" -> {
                 toggleFlashlight(false)
-                runOnUiThread {
-                    Toast.makeText(this, "🔦 Flashlight OFF", Toast.LENGTH_SHORT).show()
-                }
             }
             "toggle" -> {
                 flashlightOn = !flashlightOn
                 toggleFlashlight(flashlightOn)
-                runOnUiThread {
-                    Toast.makeText(this, "🔦 Flashlight ${if (flashlightOn) "ON" else "OFF"}", Toast.LENGTH_SHORT).show()
-                }
             }
         }
     }
 
-    // CAMERA COMMANDS
-    private fun handleCameraCommand(action: String, command: JSONObject) {
+    private fun handleCameraAction(action: String) {
         when (action) {
             "open" -> {
                 val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
                 if (intent.resolveActivity(packageManager) != null) {
                     startActivity(intent)
-                    runOnUiThread {
-                        Toast.makeText(this, "📷 Opening Camera", Toast.LENGTH_SHORT).show()
-                    }
                 }
             }
             "take_photo" -> {
                 val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
                 startActivity(intent)
-                runOnUiThread {
-                    Toast.makeText(this, "📸 Taking Photo", Toast.LENGTH_SHORT).show()
-                }
             }
         }
     }
 
-    // VIBRATE COMMANDS
     @RequiresPermission(Manifest.permission.VIBRATE)
-    private fun handleVibrateCommand(action: String, command: JSONObject) {
+    private fun handleVibrateAction(action: String) {
         when (action) {
             "short" -> {
                 vibrator.vibrate(200)
-                runOnUiThread {
-                    Toast.makeText(this, "📳 Short Vibration", Toast.LENGTH_SHORT).show()
-                }
             }
             "long" -> {
                 vibrator.vibrate(1000)
-                runOnUiThread {
-                    Toast.makeText(this, "📳 Long Vibration", Toast.LENGTH_SHORT).show()
-                }
             }
             "pattern" -> {
                 val pattern = longArrayOf(0, 100, 200, 100, 200)
                 vibrator.vibrate(pattern, -1)
-                runOnUiThread {
-                    Toast.makeText(this, "📳 Pattern Vibration", Toast.LENGTH_SHORT).show()
-                }
             }
         }
     }
 
-    // VOLUME COMMANDS
-    private fun handleVolumeCommand(action: String, command: JSONObject) {
+    private fun handleVolumeAction(action: String, level: Int) {
         when (action) {
             "up" -> {
                 audioManager.adjustVolume(AudioManager.ADJUST_RAISE, AudioManager.FLAG_SHOW_UI)
-                runOnUiThread {
-                    Toast.makeText(this, "🔊 Volume UP", Toast.LENGTH_SHORT).show()
-                }
             }
             "down" -> {
                 audioManager.adjustVolume(AudioManager.ADJUST_LOWER, AudioManager.FLAG_SHOW_UI)
-                runOnUiThread {
-                    Toast.makeText(this, "🔉 Volume DOWN", Toast.LENGTH_SHORT).show()
-                }
             }
             "mute" -> {
                 audioManager.adjustVolume(AudioManager.ADJUST_MUTE, AudioManager.FLAG_SHOW_UI)
-                runOnUiThread {
-                    Toast.makeText(this, "🔇 Volume MUTED", Toast.LENGTH_SHORT).show()
-                }
             }
             "set" -> {
-                val level = command.optInt("level", 50)
                 val maxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
                 val targetVolume = (level * maxVolume) / 100
                 audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, targetVolume, AudioManager.FLAG_SHOW_UI)
-                runOnUiThread {
-                    Toast.makeText(this, "🔊 Volume set to $level%", Toast.LENGTH_SHORT).show()
-                }
             }
         }
     }
 
-    // SYSTEM COMMANDS
-    private fun handleSystemCommand(action: String, command: JSONObject) {
+    private fun handleSystemAction(action: String) {
         when (action) {
             "screen_on" -> {
                 val wakeLock = powerManager.newWakeLock(
                     PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
                     "TelemetryApp:ScreenOn"
                 )
-                wakeLock.acquire(10000) // 10 seconds
-                runOnUiThread {
-                    Toast.makeText(this, "💡 Screen turned ON", Toast.LENGTH_SHORT).show()
-                }
+                wakeLock.acquire(10000)
             }
             "restart_app" -> {
-                runOnUiThread {
-                    Toast.makeText(this, "🔄 Restarting app...", Toast.LENGTH_SHORT).show()
-                }
                 val intent = packageManager.getLaunchIntentForPackage(packageName)
                 intent?.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
                 startActivity(intent)
@@ -449,20 +567,11 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         }
     }
 
-    // NOTIFICATION COMMANDS
-    private fun handleNotificationCommand(action: String, command: JSONObject) {
-        when (action) {
-            "show" -> {
-                val title = command.optString("title", "Remote Command")
-                val message = command.optString("message", "Command executed successfully")
-                runOnUiThread {
-                    Toast.makeText(this, "📱 $title: $message", Toast.LENGTH_LONG).show()
-                }
-            }
-        }
+    private fun handleNotificationAction(title: String, message: String) {
     }
 
-    // FLASHLIGHT HELPER
+
+
     private fun toggleFlashlight(on: Boolean) {
         try {
             cameraId?.let { id ->
@@ -470,35 +579,185 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
                 flashlightOn = on
             }
         } catch (e: Exception) {
-            println("❌ Flashlight error: ${e.message}")
+            println("Flashlight error: ${e.message}")
         }
     }
 
-    private fun sendCommandResponse(originalTopic: String, status: String, message: String) {
+
+    // 🚀 PROTOBUF COMMAND RESPONSE!
+    private fun sendCommandResponseProtobuf(success: Boolean, message: String) {
         telemetryScope.launch {
             try {
-                val response = JSONObject().apply {
-                    put("status", status)
-                    put("message", message)
-                    put("timestamp", System.currentTimeMillis())
-                    put("original_topic", originalTopic)
-                }
-
-                // KORISTIMO Build.DEVICE umesto clientId
-                val deviceId = Build.DEVICE
-                val responseTopic = "response/${deviceId}/command"
-                sendJsonMessage(responseTopic, response)
+                // SIMPLE PROTOBUF RESPONSE ENCODING
+                val responseBytes = createProtobufResponse(success, message, Build.DEVICE)
+                val responseTopic = "response/${Build.DEVICE}/protobuf"
+                sendProtobufMessage(responseTopic, responseBytes)
 
             } catch (e: Exception) {
-                println("❌ Response send error: ${e.message}")
+                println("Protobuf response send error: ${e.message}")
             }
         }
     }
 
+    private fun createProtobufResponse(success: Boolean, message: String, deviceId: String): ByteArray {
+        val buffer = mutableListOf<Byte>()
+
+        // Field 1: success (bool)
+        buffer.add((1 shl 3).toByte()) // field 1, wire type 0
+        buffer.add(if (success) 1 else 0)
+
+        // Field 2: message (string)
+        buffer.add(((2 shl 3) or 2).toByte()) // field 2, wire type 2
+        val messageBytes = message.toByteArray()
+        writeVarintToBuffer(buffer, messageBytes.size)
+        buffer.addAll(messageBytes.toList())
+
+        // Field 4: device_id (string)
+        buffer.add(((4 shl 3) or 2).toByte()) // field 4, wire type 2
+        val deviceIdBytes = deviceId.toByteArray()
+        writeVarintToBuffer(buffer, deviceIdBytes.size)
+        buffer.addAll(deviceIdBytes.toList())
+
+        // Field 5: timestamp (int64)
+        buffer.add((5 shl 3).toByte()) // field 5, wire type 0
+        writeVarintToBuffer(buffer, System.currentTimeMillis().toInt())
+
+        return buffer.toByteArray()
+    }
+
+    private fun writeVarintToBuffer(buffer: MutableList<Byte>, value: Int) {
+        var v = value
+        while (v >= 0x80) {
+            buffer.add(((v and 0xFF) or 0x80).toByte())
+            v = v ushr 7
+        }
+        buffer.add((v and 0xFF).toByte())
+    }
+
+    // PROTOBUF TELEMETRY FUNCTIONS
+    private fun collectAndSendDeviceInfoProtobuf() {
+        try {
+            val runtime = Runtime.getRuntime()
+
+            val deviceInfoBuilder = TelemetryProto.DeviceInfo.newBuilder()
+                .setDeviceId(Build.DEVICE)
+                .setModel(Build.MODEL)
+                .setManufacturer(Build.MANUFACTURER)
+                .setAndroidVersion(Build.VERSION.RELEASE)
+                .setApiLevel(Build.VERSION.SDK_INT)
+                .setTotalMemory(runtime.totalMemory())
+                .setFreeMemory(runtime.freeMemory())
+                .setUsedMemory(runtime.totalMemory() - runtime.freeMemory())
+                .setTimestamp(System.currentTimeMillis())
+
+            try {
+                val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+                if (ActivityCompat.checkSelfPermission(
+                        this@MainActivity,
+                        Manifest.permission.ACCESS_FINE_LOCATION
+                    ) == PackageManager.PERMISSION_GRANTED
+                ) {
+                    val wifiInfo = wifiManager.connectionInfo
+                    deviceInfoBuilder
+                        .setWifiSignalStrength(wifiInfo.rssi)
+                        .setWifiSsid(wifiInfo.ssid ?: "unknown")
+
+                    runOnUiThread {
+                        wifiStatusText?.text = "${wifiInfo.rssi} dBm"
+                    }
+                }
+            } catch (e: Exception) {
+                deviceInfoBuilder
+                    .setWifiSignalStrength(-999)
+                    .setWifiSsid("error")
+            }
+
+            try {
+                val telephonyManager = getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
+                if (ActivityCompat.checkSelfPermission(
+                        this@MainActivity,
+                        Manifest.permission.READ_PHONE_STATE
+                    ) == PackageManager.PERMISSION_GRANTED
+                ) {
+                    deviceInfoBuilder
+                        .setNetworkOperator(telephonyManager.networkOperatorName ?: "unknown")
+                        .setNetworkType(telephonyManager.dataNetworkType.toString())
+                }
+            } catch (e: Exception) {
+                deviceInfoBuilder
+                    .setNetworkOperator("error")
+                    .setNetworkType("error")
+            }
+
+            val deviceInfo = deviceInfoBuilder.build()
+            sendProtobufMessage("telemetry/device", deviceInfo.toByteArray())
+
+        } catch (e: Exception) {
+            runOnUiThread {
+                Toast.makeText(this@MainActivity, "Device Error: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun sendBatteryDataProtobuf(level: Float, isCharging: Boolean, voltage: Int, temperature: Float) {
+        try {
+            val batteryData = TelemetryProto.BatteryData.newBuilder()
+                .setLevel(level)
+                .setIsCharging(isCharging)
+                .setVoltage(voltage)
+                .setTemperature(temperature)
+                .setTimestamp(System.currentTimeMillis())
+                .build()
+
+            sendProtobufMessage("telemetry/battery", batteryData.toByteArray())
+        } catch (e: Exception) {
+            Toast.makeText(this, "Battery Error: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun sendSensorDataProtobuf() {
+        try {
+            val sensorData = TelemetryProto.SensorData.newBuilder()
+                .setAmbientTemperature(currentTemperature)
+                .setAccelerometerX(accelerometerData[0])
+                .setAccelerometerY(accelerometerData[1])
+                .setAccelerometerZ(accelerometerData[2])
+                .setGyroscopeX(gyroscopeData[0])
+                .setGyroscopeY(gyroscopeData[1])
+                .setGyroscopeZ(gyroscopeData[2])
+                .setTimestamp(System.currentTimeMillis())
+                .build()
+
+            sendProtobufMessage("telemetry/sensors", sensorData.toByteArray())
+        } catch (e: Exception) {
+            println("Sensor protobuf error: ${e.message}")
+        }
+    }
+
+    private fun sendProtobufMessage(topic: String, data: ByteArray) {
+        telemetryScope.launch {
+            try {
+                mqttClient?.let { client ->
+                    if (client.isConnected) {
+                        val message = MqttMessage(data).apply {
+                            qos = 1
+                        }
+                        client.publish(topic, message)
+                    } else {
+                        println("MQTT not connected for topic: $topic")
+                    }
+                }
+            } catch (e: Exception) {
+                println("MQTT Send Error for $topic: ${e.message}")
+            }
+        }
+    }
+
+
     private fun startTelemetryCollection() {
         telemetryScope.launch {
             while (isActive) {
-                collectAndSendDeviceInfo()
+                collectAndSendDeviceInfoProtobuf()
                 updateMemoryInfo()
                 delay(10000)
             }
@@ -512,122 +771,6 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
         runOnUiThread {
             memoryStatusText?.text = "${usedMB}MB/${totalMB}MB"
-        }
-    }
-
-    private fun collectAndSendDeviceInfo() {
-        try {
-            val deviceInfo = JSONObject().apply {
-                put("device_id", Build.DEVICE)
-                put("model", Build.MODEL)
-                put("manufacturer", Build.MANUFACTURER)
-                put("android_version", Build.VERSION.RELEASE)
-                put("api_level", Build.VERSION.SDK_INT)
-
-                val runtime = Runtime.getRuntime()
-                put("total_memory", runtime.totalMemory())
-                put("free_memory", runtime.freeMemory())
-                put("used_memory", runtime.totalMemory() - runtime.freeMemory())
-
-                try {
-                    val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-                    if (ActivityCompat.checkSelfPermission(
-                            this@MainActivity,
-                            Manifest.permission.ACCESS_FINE_LOCATION
-                        ) == PackageManager.PERMISSION_GRANTED
-                    ) {
-                        val wifiInfo = wifiManager.connectionInfo
-                        put("wifi_signal_strength", wifiInfo.rssi)
-                        put("wifi_ssid", wifiInfo.ssid ?: "unknown")
-
-                        runOnUiThread {
-                            wifiStatusText?.text = "${wifiInfo.rssi} dBm"
-                        }
-                    }
-                } catch (e: Exception) {
-                    put("wifi_signal_strength", -999)
-                    put("wifi_ssid", "error")
-                }
-
-                try {
-                    val telephonyManager = getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
-                    if (ActivityCompat.checkSelfPermission(
-                            this@MainActivity,
-                            Manifest.permission.READ_PHONE_STATE
-                        ) == PackageManager.PERMISSION_GRANTED
-                    ) {
-                        put("network_operator", telephonyManager.networkOperatorName ?: "unknown")
-                        put("network_type", telephonyManager.dataNetworkType.toString())
-                    }
-                } catch (e: Exception) {
-                    put("network_operator", "error")
-                    put("network_type", "error")
-                }
-
-                put("timestamp", System.currentTimeMillis())
-            }
-
-            sendJsonMessage("telemetry/device", deviceInfo)
-
-        } catch (e: Exception) {
-            runOnUiThread {
-                Toast.makeText(this@MainActivity, "Device Error: ${e.message}", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-
-    private fun sendBatteryData(level: Float, isCharging: Boolean, voltage: Int, temperature: Float) {
-        try {
-            val batteryData = JSONObject().apply {
-                put("level", level)
-                put("is_charging", isCharging)
-                put("voltage", voltage)
-                put("temperature", temperature)
-                put("timestamp", System.currentTimeMillis())
-            }
-
-            sendJsonMessage("telemetry/battery", batteryData)
-        } catch (e: Exception) {
-            Toast.makeText(this, "Battery Error: ${e.message}", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun sendSensorData() {
-        try {
-            val sensorData = JSONObject().apply {
-                put("ambient_temperature", currentTemperature)
-                put("accelerometer_x", accelerometerData[0])
-                put("accelerometer_y", accelerometerData[1])
-                put("accelerometer_z", accelerometerData[2])
-                put("gyroscope_x", gyroscopeData[0])
-                put("gyroscope_y", gyroscopeData[1])
-                put("gyroscope_z", gyroscopeData[2])
-                put("timestamp", System.currentTimeMillis())
-            }
-
-            sendJsonMessage("telemetry/sensors", sensorData)
-        } catch (e: Exception) {
-            // Silent fail
-        }
-    }
-
-    private fun sendJsonMessage(topic: String, jsonData: JSONObject) {
-        telemetryScope.launch {
-            try {
-                mqttClient?.let { client ->
-                    if (client.isConnected) {
-                        val message = MqttMessage(jsonData.toString().toByteArray()).apply {
-                            qos = 1
-                        }
-                        client.publish(topic, message)
-                        println("📤 Sent JSON message to $topic: ${jsonData.toString().take(100)}...")
-                    } else {
-                        println("MQTT not connected for topic: $topic")
-                    }
-                }
-            } catch (e: Exception) {
-                println("MQTT Send Error for $topic: ${e.message}")
-            }
         }
     }
 
@@ -650,7 +793,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
             if (Random().nextInt(200) == 1) {
                 telemetryScope.launch {
-                    sendSensorData()
+                    sendSensorDataProtobuf()
                 }
             }
         }

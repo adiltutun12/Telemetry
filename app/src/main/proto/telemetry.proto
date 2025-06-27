@@ -3,7 +3,7 @@ syntax = "proto3";
 package telemetry;
 
 option java_package = "com.example.telemetry";
-option java_outer_classname = "proto";
+option java_outer_classname = "TelemetryProto";
 
 // Osnovne informacije o uređaju
 message DeviceInfo {
@@ -53,7 +53,108 @@ message SensorData {
   int64 timestamp = 8;
 }
 
-// Kombinovani telemetrijski paket
+// NOVE KOMANDNE PORUKE! 🚀
+
+// Osnovni tipovi komandi
+enum CommandType {
+  FLASHLIGHT = 0;
+  CAMERA = 1;
+  VIBRATE = 2;
+  VOLUME = 3;
+  SYSTEM = 4;
+  NOTIFICATION = 5;
+}
+
+// Flashlight komande
+enum FlashlightAction {
+  FLASHLIGHT_ON = 0;
+  FLASHLIGHT_OFF = 1;
+  FLASHLIGHT_TOGGLE = 2;
+}
+
+// Camera komande
+enum CameraAction {
+  CAMERA_OPEN = 0;
+  CAMERA_TAKE_PHOTO = 1;
+}
+
+// Vibration komande
+enum VibrateAction {
+  VIBRATE_SHORT = 0;
+  VIBRATE_LONG = 1;
+  VIBRATE_PATTERN = 2;
+}
+
+enum VolumeAction {
+  VOLUME_UP = 0;
+  VOLUME_DOWN = 1;
+  VOLUME_MUTE = 2;
+  VOLUME_SET = 3;  // Koristi se sa volume_level poljem
+}
+
+enum SystemAction {
+  SYSTEM_SCREEN_ON = 0;
+  SYSTEM_RESTART_APP = 1;
+}
+
+enum NotificationAction {
+  NOTIFICATION_SHOW = 0;
+}
+
+message Command {
+  CommandType type = 1;
+  int64 timestamp = 2;
+  string device_id = 3;  // Target device
+
+  oneof command_data {
+    FlashlightCommand flashlight = 10;
+    CameraCommand camera = 11;
+    VibrateCommand vibrate = 12;
+    VolumeCommand volume = 13;
+    SystemCommand system = 14;
+    NotificationCommand notification = 15;
+  }
+}
+
+// Specifične komandne strukture
+message FlashlightCommand {
+  FlashlightAction action = 1;
+}
+
+message CameraCommand {
+  CameraAction action = 1;
+}
+
+message VibrateCommand {
+  VibrateAction action = 1;
+}
+
+message VolumeCommand {
+  VolumeAction action = 1;
+  int32 volume_level = 2;  // 0-100, koristi se samo za VOLUME_SET
+}
+
+message SystemCommand {
+  SystemAction action = 1;
+}
+
+message NotificationCommand {
+  NotificationAction action = 1;
+  string title = 2;
+  string message = 3;
+}
+
+// Odgovor na komandu
+message CommandResponse {
+  bool success = 1;
+  string message = 2;
+  string original_command_type = 3;
+  string device_id = 4;
+  int64 timestamp = 5;
+  string error_details = 6;  // Ako success = false
+}
+
+// Kombinovani telemetrijski paket (opciono)
 message TelemetryPacket {
   DeviceInfo device_info = 1;
   BatteryData battery_data = 2;
