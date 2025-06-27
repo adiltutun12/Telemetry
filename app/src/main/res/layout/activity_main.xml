@@ -1,0 +1,183 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp"
+    android:background="#f5f5f5">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Android Telemetry App"
+        android:textSize="24sp"
+        android:textStyle="bold"
+        android:textColor="#333"
+        android:gravity="center"
+        android:padding="16dp"
+        android:background="#ffffff"
+        android:layout_marginBottom="16dp"
+        android:elevation="4dp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:background="#ffffff"
+        android:padding="16dp"
+        android:layout_marginBottom="8dp"
+        android:elevation="2dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Baterija:"
+            android:textSize="16sp"
+            android:textColor="#666" />
+
+        <TextView
+            android:id="@+id/battery_status"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Učitava..."
+            android:textSize="16sp"
+            android:textColor="#333"
+            android:textStyle="bold" />
+
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:background="#ffffff"
+        android:padding="16dp"
+        android:layout_marginBottom="8dp"
+        android:elevation="2dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Temperatura:"
+            android:textSize="16sp"
+            android:textColor="#666" />
+
+        <TextView
+            android:id="@+id/temperature_status"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="N/A"
+            android:textSize="16sp"
+            android:textColor="#333"
+            android:textStyle="bold" />
+
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:background="#ffffff"
+        android:padding="16dp"
+        android:layout_marginBottom="8dp"
+        android:elevation="2dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="📶 WiFi Signal:"
+            android:textSize="16sp"
+            android:textColor="#666" />
+
+        <TextView
+            android:id="@+id/wifi_status"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Učitava..."
+            android:textSize="16sp"
+            android:textColor="#333"
+            android:textStyle="bold" />
+
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:background="#ffffff"
+        android:padding="16dp"
+        android:layout_marginBottom="8dp"
+        android:elevation="2dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Memorija:"
+            android:textSize="16sp"
+            android:textColor="#666" />
+
+        <TextView
+            android:id="@+id/memory_status"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Učitava..."
+            android:textSize="16sp"
+            android:textColor="#333"
+            android:textStyle="bold" />
+
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:background="#ffffff"
+        android:padding="16dp"
+        android:layout_marginBottom="16dp"
+        android:elevation="2dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="MQTT Status:"
+            android:textSize="16sp"
+            android:textColor="#666" />
+
+        <TextView
+            android:id="@+id/mqtt_status"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Povezuje se..."
+            android:textSize="16sp"
+            android:textColor="#333"
+            android:textStyle="bold" />
+
+    </LinearLayout>
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="📊 Podaci se automatski šalju preko MQTT-a svakih 10 sekundi koristeći Protocol Buffers za efikasnu serijalizaciju."
+        android:textSize="14sp"
+        android:textColor="#666"
+        android:padding="16dp"
+        android:background="#e8f5e8"
+        android:layout_marginTop="16dp" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="MQTT Topics:\n• telemetry/device - Info o uređaju\n• telemetry/battery - Podaci o bateriji\n• telemetry/sensors - Podaci sa senzora"
+        android:textSize="12sp"
+        android:textColor="#888"
+        android:padding="16dp"
+        android:background="#f0f0f0"
+        android:layout_marginTop="8dp"
+        android:fontFamily="monospace" />
+
+</LinearLayout>

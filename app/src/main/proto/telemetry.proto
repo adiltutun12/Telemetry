@@ -1,0 +1,62 @@
+syntax = "proto3";
+
+package telemetry;
+
+option java_package = "com.example.telemetry";
+option java_outer_classname = "proto";
+
+// Osnovne informacije o uređaju
+message DeviceInfo {
+  string device_id = 1;
+  string model = 2;
+  string manufacturer = 3;
+  string android_version = 4;
+  int32 api_level = 5;
+
+  // Memorijske informacije
+  int64 total_memory = 6;
+  int64 free_memory = 7;
+  int64 used_memory = 8;
+
+  // Mrežne informacije
+  int32 wifi_signal_strength = 9;
+  string wifi_ssid = 10;
+  string network_operator = 11;
+  string network_type = 12;
+
+  int64 timestamp = 13;
+}
+
+// Podaci o bateriji
+message BatteryData {
+  float level = 1;              // Procenat napunjenosti
+  bool is_charging = 2;         // Da li se puni
+  int32 voltage = 3;           // Napon u mV
+  float temperature = 4;        // Temperatura baterije u °C
+  int64 timestamp = 5;
+}
+
+// Podaci sa senzora
+message SensorData {
+  float ambient_temperature = 1;    // Temperatura okoline u °C
+
+  // Accelerometar (m/s²)
+  float accelerometer_x = 2;
+  float accelerometer_y = 3;
+  float accelerometer_z = 4;
+
+  // Žiroskop (rad/s)
+  float gyroscope_x = 5;
+  float gyroscope_y = 6;
+  float gyroscope_z = 7;
+
+  int64 timestamp = 8;
+}
+
+// Kombinovani telemetrijski paket
+message TelemetryPacket {
+  DeviceInfo device_info = 1;
+  BatteryData battery_data = 2;
+  SensorData sensor_data = 3;
+  int64 packet_timestamp = 4;
+}
