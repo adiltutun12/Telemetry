@@ -498,17 +498,16 @@
 <script>
     const MQTT_BROKER = "broker.hivemq.com";
     const MQTT_PORT = 8000;
-    const CLIENT_ID = "WebDashboard_" + Math.random().toString(36).substr(2, 9);
+    const CLIENT_ID = "ProtobufDashboard_" + Math.random().toString(36).substr(2, 9);
 
     let client;
     let messageCount = 0;
     let commandsSent = 0;
     let responsesReceived = 0;
-    let totalDataSaved = 0;
+    let protobufDataSaved = 0;
     let connectedDevices = new Set();
     let selectedDeviceId = null;
 
-    // Protobuf Command Type Mappings
     const CommandType = {
         FLASHLIGHT: 0,
         CAMERA: 1,
@@ -551,7 +550,6 @@
         NOTIFICATION_SHOW: 0
     };
 
-    // Protocol Buffer field mappings (same as before for telemetry)
     const DEVICE_INFO_FIELDS = {
         1: 'device_id', 2: 'model', 3: 'manufacturer', 4: 'android_version', 5: 'api_level',
         6: 'total_memory', 7: 'free_memory', 8: 'used_memory', 9: 'wifi_signal_strength',
@@ -572,14 +570,12 @@
     };
 
     function connectMQTT() {
-        updateConnectionStatus("Connecting to MQTT...", false);
-        console.log("Connecting to MQTT (Full Protobuf Mode):", MQTT_BROKER + ":" + MQTT_PORT);
+        updateConnectionStatus("Connecting to MQTT", false);
 
         try {
             client = new Paho.MQTT.Client(MQTT_BROKER, MQTT_PORT, "/mqtt", CLIENT_ID);
 
             client.onConnectionLost = function(responseObject) {
-                console.log("Connection lost:", responseObject);
                 if (responseObject.errorCode !== 0) {
                     updateConnectionStatus("Connection Lost: " + responseObject.errorMessage, false);
                     setTimeout(connectMQTT, 5000);
@@ -587,7 +583,12 @@
             };
 
             client.onMessageArrived = function(message) {
-                handleMessage(message.destinationName, message.payloadBytes || message.payloadString);
+                if (message.payloadBytes) {
+                    handleProtobufMessage(message.destinationName, message.payloadBytes);
+                } else {
+                    console.warn("Received non-binary message - ignoring");
+                    addLogEntry("IGNORED", "Non-protobuf message received and ignored");
+                }
             };
 
             const connectOptions = {
@@ -597,7 +598,7 @@
                 useSSL: false,
                 onSuccess: function() {
                     updateConnectionStatus("Connected", true);
-                    subscribeToTopics();
+                    subscribeToProtobufTopics();
                 },
                 onFailure: function(error) {
                     console.error("MQTT Connection failed:", error);
@@ -614,14 +615,11 @@
         }
     }
 
-    function subscribeToTopics() {
-        // Subscribe to telemetry (protobuf)
-        client.subscribe("telemetry/+");
+    function subscribeToProtobufTopics() {
+        client.subscribe("telemetry/+");  // Device, battery, sensor protobuf data
+        client.subscribe("response/+/protobuf");  // Command responses
 
-        // Subscribe to command responses (protobuf)
-        client.subscribe("response/+/protobuf");
-
-        addLogEntry("System", "Connected & subscribed to protobuf topics");
+        addLogEntry("System", "Connected & subscribed to PROTOBUF topics");
     }
 
     function updateConnectionStatus(status, connected) {
@@ -634,28 +632,17 @@
         }
     }
 
-    function handleMessage(topic, payload) {
+    function handleProtobufMessage(topic, payload) {
         messageCount++;
         document.getElementById('msgCount').textContent = messageCount;
         document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
 
-
-        // All messages should be protobuf now
-        if (payload instanceof Uint8Array || payload instanceof ArrayBuffer) {
-            handleProtobufMessage(topic, payload);
-        } else {
-            addLogEntry(topic, "Unexpected string message: " + payload);
-        }
-    }
-
-    function handleProtobufMessage(topic, payload) {
         try {
             const bytes = payload instanceof ArrayBuffer ? new Uint8Array(payload) : payload;
-
             let data = null;
             let fieldMapping = null;
 
-            // Determine message type by topic
+            // DETERMINE MESSAGE TYPE BY TOPIC
             if (topic === "telemetry/device") {
                 fieldMapping = DEVICE_INFO_FIELDS;
             } else if (topic === "telemetry/battery") {
@@ -670,30 +657,27 @@
                 data = decodeProtobufMessage(bytes, fieldMapping);
 
                 if (data) {
-
-                    // Handle command responses
                     if (topic.startsWith("response/")) {
                         handleCommandResponse(data);
                         responsesReceived++;
                         document.getElementById('responsesReceived').textContent = responsesReceived;
                     } else {
-                        // Handle telemetry
                         extractDeviceInfo(data);
                         processMessageData(topic, data);
                     }
 
-                    // Calculate data savings
-                    const jsonSize = JSON.stringify(data).length;
-                    const saved = Math.max(0, jsonSize - bytes.length);
-                    totalDataSaved += saved;
-                    document.getElementById('dataSaved').textContent = Math.round(totalDataSaved / 1024) + ' KB';
+                    const estimatedJsonSize = JSON.stringify(data).length;
+                    const actualProtobufSize = bytes.length;
+                    const saved = Math.max(0, estimatedJsonSize - actualProtobufSize);
+                    protobufDataSaved += saved;
+                    document.getElementById('dataSaved').textContent = Math.round(protobufDataSaved / 1024) + ' KB';
 
-                    addLogEntry(topic, `Protobuf (${bytes.length} bytes): ` + JSON.stringify(data, null, 2));
+                    addLogEntry(topic, `Protobuf (${bytes.length}B, saved ~${saved}B): ` + JSON.stringify(data, null, 2));
                 } else {
                     addLogEntry(topic, `Failed to decode protobuf (${bytes.length} bytes)`);
                 }
             } else {
-                addLogEntry(topic, ` Unknown protobuf message type (${bytes.length} bytes)`);
+                addLogEntry(topic, `Unknown protobuf message type (${bytes.length} bytes)`);
             }
 
         } catch (e) {
@@ -703,20 +687,17 @@
     }
 
     function handleCommandResponse(data) {
-
         const status = data.success ? "SUCCESS" : "ERROR";
         const message = data.message || "No message";
         const deviceId = data.device_id || "Unknown";
 
         addLogEntry(`Response from ${deviceId}`, `${status}: ${message}`);
 
-        // Optional: Show notification
         if (!data.success && data.error_details) {
             console.error("Command failed:", data.error_details);
         }
     }
 
-    // Enhanced Protobuf decoder (same as before)
     function decodeProtobufMessage(bytes, fieldMapping) {
         try {
             const result = {};
@@ -729,7 +710,7 @@
                 const fieldNum = tag >> 3;
                 const wireType = tag & 0x07;
 
-                if (wireType === 0) { // Varint
+                if (wireType === 0) {
                     const value = readVarint(bytes, pos);
                     pos = value.pos;
 
@@ -752,7 +733,7 @@
                         pos += 8;
                     } else break;
 
-                } else if (wireType === 2) { // Length-delimited
+                } else if (wireType === 2) {
                     const length = readVarint(bytes, pos);
                     pos = length.pos;
                     if (pos + length.value <= bytes.length) {
@@ -764,7 +745,7 @@
                         pos += length.value;
                     } else break;
 
-                } else if (wireType === 5) { // 32-bit
+                } else if (wireType === 5) {
                     if (pos + 4 <= bytes.length) {
                         const value = readFloat(bytes, pos);
                         const fieldName = fieldMapping[fieldNum];
@@ -774,7 +755,6 @@
                         pos += 4;
                     } else break;
                 } else {
-                    console.log("Unknown wire type:", wireType);
                     break;
                 }
             }
@@ -913,15 +893,13 @@
 
     function handleBatteryData(data) {
         document.getElementById('batteryLevel').textContent = Math.round(data.level) + '%';
-        document.getElementById('isCharging').textContent = data.is_charging ? '⚡ Yes' : 'No';
+        document.getElementById('isCharging').textContent = data.is_charging ? 'Yes' : 'No';
         document.getElementById('batteryVoltage').textContent = data.voltage + ' mV';
         document.getElementById('batteryTemp').textContent = data.temperature.toFixed(1) + '°C';
         document.getElementById('batteryProgress').style.width = data.level + '%';
     }
 
     function handleSensorData(data) {
-
-        // SAFE HANDLING SA DEFAULT VREDNOSTIMA
         const ambientTemp = data.ambient_temperature || 0;
         const accelX = data.accelerometer_x || 0;
         const accelY = data.accelerometer_y || 0;
@@ -930,7 +908,6 @@
         const gyroY = data.gyroscope_y || 0;
         const gyroZ = data.gyroscope_z || 0;
 
-        // SAFE toFixed() CALLS
         try {
             document.getElementById('ambientTemp').textContent =
                 (typeof ambientTemp === 'number' && !isNaN(ambientTemp))
@@ -952,7 +929,6 @@
                     ? accelZ.toFixed(2) + ' m/s²'
                     : 'N/A';
 
-            // Opciono: dodaj gyroscope podatke ako imaš UI elemente
             if (document.getElementById('gyroX')) {
                 document.getElementById('gyroX').textContent =
                     (typeof gyroX === 'number' && !isNaN(gyroX))
@@ -974,11 +950,8 @@
                         : 'N/A';
             }
 
-
         } catch (error) {
             console.error("Error updating sensor UI:", error);
-
-
             // Fallback values
             document.getElementById('ambientTemp').textContent = 'Error';
             document.getElementById('accelX').textContent = 'Error';
@@ -1001,7 +974,7 @@
         logEntry.innerHTML = `
             <div style="display: flex; justify-content: space-between; align-items: center;">
                 <span style="color: #666; font-size: 0.8em;">${timestamp}</span>
-                <span style="background: #28a745; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.7em;">PROTOBUF</span>
+                <span style="background: #007bff; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.7em;">PROTOBUF</span>
             </div>
             <div style="font-weight: bold; color: #007bff; margin: 5px 0;">${topic}</div>
             <pre style="margin: 5px 0; font-size: 0.8em; white-space: pre-wrap; max-height: 100px; overflow-y: auto;">${data}</pre>
@@ -1015,9 +988,8 @@
     }
 
     function clearLogs() {
-        document.getElementById('mqttLogs').innerHTML = '<div class="no-data">Logs cleared...</div>';
+        document.getElementById('mqttLogs').innerHTML = '<div class="no-data">Logs cleared</div>';
     }
-
 
     function sendProtobufCommand(commandType, action) {
         if (!selectedDeviceId) {
@@ -1038,14 +1010,13 @@
             message.destinationName = topic;
             message.qos = 1;
 
-            console.log(`Sending Protobuf command: ${topic} -> ${commandType}:${action} (${commandBytes.length} bytes)`);
 
             client.send(message);
 
             commandsSent++;
             document.getElementById('commandsSent').textContent = commandsSent;
 
-            addLogEntry(`SENT: ${topic}`, `${commandType} -> ${action} (${commandBytes.length} bytes)`);
+            addLogEntry(`SENT: ${topic}`, `${commandType} -> ${action} (${commandBytes.length} bytes protobuf)`);
 
         } catch (error) {
             console.error("Protobuf command send error:", error);
@@ -1072,7 +1043,7 @@
             commandsSent++;
             document.getElementById('commandsSent').textContent = commandsSent;
 
-            addLogEntry(`SENT: ${topic}`, `VOLUME -> SET:${level}% (${commandBytes.length} bytes)`);
+            addLogEntry(`SENT: ${topic}`, `VOLUME -> SET:${level}% (${commandBytes.length} bytes protobuf)`);
 
         } catch (error) {
             console.error("Volume command error:", error);
@@ -1098,35 +1069,28 @@
             commandsSent++;
             document.getElementById('commandsSent').textContent = commandsSent;
 
-            addLogEntry(`SENT: ${topic}`, `NOTIFICATION -> "${title}: ${message}" (${commandBytes.length} bytes)`);
+            addLogEntry(`SENT: ${topic}`, `NOTIFICATION -> "${title}: ${message}" (${commandBytes.length} bytes protobuf)`);
 
         } catch (error) {
             console.error("Notification send error:", error);
         }
     }
 
-    // 🛠️ PROTOBUF COMMAND CREATION FUNCTIONS
-
     function createProtobufCommand(commandType, action, deviceId) {
-        // Simple protobuf encoding for Command message
         const buffer = [];
 
-        // Field 1: type (varint)
-        writeVarint(buffer, (1 << 3) | 0); // field 1, wire type 0
+        writeVarint(buffer, (1 << 3) | 0);
         writeVarint(buffer, CommandType[commandType]);
 
-        // Field 2: timestamp (varint)
         writeVarint(buffer, (2 << 3) | 0);
         writeVarint(buffer, Date.now());
 
-        // Field 3: device_id (string)
-        writeVarint(buffer, (3 << 3) | 2); // field 3, wire type 2
+        writeVarint(buffer, (3 << 3) | 2);
         writeString(buffer, deviceId);
 
-        // Field 10-15: specific command data (oneof)
         const commandField = getCommandFieldNumber(commandType);
         if (commandField) {
-            writeVarint(buffer, (commandField << 3) | 2); // wire type 2 for message
+            writeVarint(buffer, (commandField << 3) | 2);
 
             const actionBytes = createActionMessage(commandType, action);
             writeVarint(buffer, actionBytes.length);
@@ -1139,7 +1103,6 @@
     function createVolumeProtobufCommand(deviceId, level) {
         const buffer = [];
 
-        // Command header
         writeVarint(buffer, (1 << 3) | 0); // type
         writeVarint(buffer, CommandType.VOLUME);
 
@@ -1167,7 +1130,6 @@
     function createNotificationProtobufCommand(deviceId, title, message) {
         const buffer = [];
 
-        // Command header
         writeVarint(buffer, (1 << 3) | 0); // type
         writeVarint(buffer, CommandType.NOTIFICATION);
 
@@ -1177,7 +1139,6 @@
         writeVarint(buffer, (3 << 3) | 2); // device_id
         writeString(buffer, deviceId);
 
-        // Notification command (field 15)
         writeVarint(buffer, (15 << 3) | 2);
 
         const notificationBytes = [];
@@ -1209,7 +1170,6 @@
     function createActionMessage(commandType, action) {
         const buffer = [];
 
-        // Field 1: action (varint)
         writeVarint(buffer, (1 << 3) | 0);
 
         let actionValue;
@@ -1240,7 +1200,6 @@
         return buffer;
     }
 
-    // Protobuf encoding helpers
     function writeVarint(buffer, value) {
         while (value >= 0x80) {
             buffer.push((value & 0xFF) | 0x80);
@@ -1255,11 +1214,10 @@
         buffer.push(...bytes);
     }
 
-    // Initialize on page load
     window.onload = function() {
         connectMQTT();
     };
-
 </script>
+
 </body>
 </html>

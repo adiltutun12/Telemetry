@@ -88,7 +88,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="📶 WiFi Signal:"
+            android:text="WiFi Signal:"
             android:textSize="16sp"
             android:textColor="#666" />
 
@@ -162,7 +162,7 @@
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="📊 Podaci se automatski šalju preko MQTT-a svakih 10 sekundi koristeći Protocol Buffers za efikasnu serijalizaciju."
+        android:text="Podaci se automatski šalju preko MQTT-a svakih 10 sekundi koristeći Protocol Buffers za efikasnu serijalizaciju."
         android:textSize="14sp"
         android:textColor="#666"
         android:padding="16dp"
