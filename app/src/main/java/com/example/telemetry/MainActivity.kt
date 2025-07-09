@@ -11,18 +11,27 @@ import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.hardware.camera2.CameraManager
+import android.location.LocationManager
 import android.media.AudioManager
+import android.media.Ringtone
+import android.media.RingtoneManager
+import android.media.ToneGenerator
+import android.net.Uri
 import android.net.wifi.WifiManager
 import android.os.BatteryManager
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.os.PowerManager
 import android.os.Vibrator
 import android.provider.MediaStore
 import android.telephony.TelephonyManager
+import android.view.WindowManager
 import android.widget.TextView
 import android.widget.Toast
 import androidx.annotation.RequiresPermission
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -61,6 +70,15 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     private var memoryStatusText: TextView? = null
     private var mqttStatusText: TextView? = null
 
+    //find my device
+    private var findDeviceActive = false
+    private var findDeviceJob: Job? = null
+    private lateinit var ringtoneManager: RingtoneManager
+    private var findDeviceRingtone: Ringtone? = null
+    private var findDeviceVibrateJob: Job? = null
+    private var findDeviceFlashlightJob: Job? = null
+    private var findDeviceAlarmJob: Job? = null
+
     private val batteryReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             intent?.let {
@@ -90,6 +108,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
         initializeUI()
         initializeRemoteControl()
+        initializeFindMyDevice()
         checkPermissions()
         initializeSensors()
         initializeMqtt()
@@ -98,10 +117,14 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         startTelemetryCollection()
     }
 
+    private fun initializeFindMyDevice() {
+        ringtoneManager = RingtoneManager(this)
+    }
+
     private fun initializeUI() {
         try {
             batteryStatusText = findViewById(R.id.battery_status)
-            temperatureStatusText = findViewById(R.id.temperature_status)
+            //temperatureStatusText = findViewById(R.id.temperature_status)
             wifiStatusText = findViewById(R.id.wifi_status)
             memoryStatusText = findViewById(R.id.memory_status)
             mqttStatusText = findViewById(R.id.mqtt_status)
@@ -149,6 +172,11 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
             != PackageManager.PERMISSION_GRANTED) {
             permissions.add(Manifest.permission.CAMERA)
+        }
+
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CALL_PHONE)
+            != PackageManager.PERMISSION_GRANTED) {
+            permissions.add(Manifest.permission.CALL_PHONE)
         }
 
         if (permissions.isNotEmpty()) {
@@ -235,7 +263,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
                         client.setCallback(object : MqttCallback {
                             override fun connectionLost(cause: Throwable?) {
                                 runOnUiThread {
-                                    mqttStatusText?.text = "Connection Lost - Reconnecting..."
+                                    mqttStatusText?.text = "Reconnecting..."
                                 }
                             }
 
@@ -263,133 +291,837 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     @RequiresPermission(Manifest.permission.VIBRATE)
     private fun handleProtobufCommand(payload: ByteArray) {
         try {
+            println("Payload size: ${payload.size} bytes")
+            println("Raw bytes: ${payload.joinToString(" ") { "%02x".format(it) }}")
+
             val commandData = parseSimpleProtobufCommand(payload)
 
             if (commandData != null) {
+                println("Type: ${commandData.type}, Action: ${commandData.action}")
+
                 when (commandData.type) {
                     0 -> {
+                        println("Executing flashlight command: ${commandData.action}")
                         when (commandData.action) {
                             0 -> handleFlashlightAction("on")
                             1 -> handleFlashlightAction("off")
                             2 -> handleFlashlightAction("toggle")
                         }
+                        sendCommandResponseProtobuf(true, "Flashlight executed: Action ${commandData.action}")
                     }
                     1 -> {
+                        println("Executing camera command: ${commandData.action}")
                         when (commandData.action) {
                             0 -> handleCameraAction("open")
                             1 -> handleCameraAction("take_photo")
                         }
+                        sendCommandResponseProtobuf(true, "Camera executed: Action ${commandData.action}")
                     }
                     2 -> {
+                        println("Executing vibrate command: ${commandData.action}")
                         when (commandData.action) {
                             0 -> handleVibrateAction("short")
                             1 -> handleVibrateAction("long")
                             2 -> handleVibrateAction("pattern")
                         }
+                        sendCommandResponseProtobuf(true, "Vibrate executed: Action ${commandData.action}")
                     }
                     3 -> {
+                        println("Executing volume command: ${commandData.action}, level: ${commandData.volumeLevel}")
                         when (commandData.action) {
                             0 -> handleVolumeAction("up", 0)
                             1 -> handleVolumeAction("down", 0)
                             2 -> handleVolumeAction("mute", 0)
                             3 -> handleVolumeAction("set", commandData.volumeLevel)
                         }
+                        sendCommandResponseProtobuf(true, "Volume executed: Action ${commandData.action}, Level ${commandData.volumeLevel}")
                     }
                     4 -> {
+                        println("Executing system command: ${commandData.action}")
                         when (commandData.action) {
                             0 -> handleSystemAction("screen_on")
                             1 -> handleSystemAction("restart_app")
                         }
+                        sendCommandResponseProtobuf(true, "System executed: Action ${commandData.action}")
                     }
                     5 -> {
+                        println("Executing notification command: ${commandData.title}, ${commandData.message}")
+                        handleNotificationAction(
+                            commandData.title ?: "Notification",
+                            commandData.message ?: "Command executed"
+                        )
+                        sendCommandResponseProtobuf(true, "Notification shown: ${commandData.title}")
+                    }
+                    6 -> {
+                        println("Executing URL command: ${commandData.url}")
+                        handleUrlAction(commandData.url ?: "https://google.com")
+                        sendCommandResponseProtobuf(true, "URL opened: ${commandData.url}")
+                    }
+                    7 -> {
+                        println("Executing phone call: ${commandData.message}")
+                        handlePhoneCall(commandData.message ?: "")
+                        sendCommandResponseProtobuf(true, "Phone call initiated: ${commandData.message}")
+                    }
+                    8 -> { // FIND_MY_DEVICE
+                        println("Find Device Action: ${commandData.action}")
                         when (commandData.action) {
-                            0 -> handleNotificationAction(commandData.title ?: "Notification", commandData.message ?: "Command executed")
+                            0 -> {
+                                println("ACTIVATING FIND MY DEVICE ALARM!")
+                                startFindMyDevice()
+                                return // ✅ Return after startFindMyDevice (šalje svoj response)
+                            }
+                            1 -> {
+                                println("STOPPING FIND MY DEVICE ALARM!")
+                                stopFindMyDevice()
+                                return // ✅ DODAJ return after stopFindMyDevice (šalje svoj response)
+                            }
+                            2 -> {
+                                println("PINGING DEVICE!")
+                            }
+                            else -> {
+                                println("Unknown find device action: ${commandData.action}")
+                                sendCommandResponseProtobuf(false, "Unknown find device action: ${commandData.action}")
+                                return // ✅ Return after error
+                            }
                         }
+                    }
+
+                    else -> {
+                        println("Unknown command type: ${commandData.type}")
+                        sendCommandResponseProtobuf(false, "Unknown command type: ${commandData.type}")
+                        return
                     }
                 }
 
-                sendCommandResponseProtobuf(true, "Protobuf command executed: Type ${commandData.type}, Action ${commandData.action}")
-
             } else {
-                sendCommandResponseProtobuf(false, "Failed to parse Protobuf command")
+                sendCommandResponseProtobuf(false, "Failed to parse Protobuf command - check payload format")
             }
 
         } catch (e: Exception) {
-            sendCommandResponseProtobuf(false, "Protobuf command execution failed: ${e.message}")
+            e.printStackTrace()
+            sendCommandResponseProtobuf(false, "Command execution failed: ${e.message}")
         }
     }
+
 
     data class ProtobufCommandData(
         val type: Int,
         val action: Int,
         val volumeLevel: Int = 0,
         val title: String? = null,
-        val message: String? = null
+        val message: String? = null,
+        val url: String? = null
     )
 
+    private fun handlePhoneCall(phoneNumber: String) {
+        try {
+            if (phoneNumber.isBlank()) {
+                sendCommandResponseProtobuf(false, "Phone number is empty")
+                return
+            }
+
+            // Validacija broja telefona
+            val cleanNumber = phoneNumber.replace(Regex("[^+\\d]"), "") // Ukloni sve osim + i brojevi
+
+            if (cleanNumber.length < 3) {
+                sendCommandResponseProtobuf(false, "Invalid phone number: $phoneNumber")
+                return
+            }
+
+            // Provjeri dozvolu
+            if (ActivityCompat.checkSelfPermission(this, Manifest.permission.CALL_PHONE)
+                != PackageManager.PERMISSION_GRANTED) {
+                sendCommandResponseProtobuf(false, "Call permission denied")
+                return
+            }
+
+            val callIntent = Intent(Intent.ACTION_CALL)
+            callIntent.data = Uri.parse("tel:$cleanNumber")
+            callIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+            // Pokreni poziv
+            startActivity(callIntent)
+
+            sendCommandResponseProtobuf(true, "Call initiated to: $cleanNumber")
+
+        } catch (e: SecurityException) {
+            sendCommandResponseProtobuf(false, "Security error: ${e.message}")
+        } catch (e: Exception) {
+            sendCommandResponseProtobuf(false, "Call failed: ${e.message}")
+        }
+    }
+
+    private fun handleUrlAction(url: String) {
+        try {
+            var targetUrl = url
+
+            if (!targetUrl.startsWith("http://") && !targetUrl.startsWith("https://")) {
+                targetUrl = "https://$targetUrl"
+            }
+
+            val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(targetUrl))
+
+            if (browserIntent.resolveActivity(packageManager) != null) {
+                startActivity(browserIntent)
+
+                sendCommandResponseProtobuf(true, "URL opened successfully: $targetUrl")
+            } else {
+                sendCommandResponseProtobuf(false, "No browser application available")
+            }
+
+        } catch (e: Exception) {
+            sendCommandResponseProtobuf(false, "Failed to open URL: ${e.message}")
+        }
+    }
+
+
+    private fun startFindMyDevice() {
+        try {
+            findDeviceActive = true
+            println(" STARTING FIND MY DEVICE ALARM! ")
+
+            // 1. Maksimalna svjetlina
+            runOnUiThread {
+                try {
+                    val layoutParams = window.attributes
+                    layoutParams.screenBrightness = 1.0f
+                    window.attributes = layoutParams
+                    println(" Screen brightness set to maximum")
+                } catch (e: Exception) {
+                    println("️ Brightness error: ${e.message}")
+                }
+            }
+
+            // 2. Maksimalna glasnoća za sve dostupne streamove
+            try {
+                val maxAlarmVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM)
+                val maxMusicVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                val maxRingVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_RING)
+                val maxNotificationVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_NOTIFICATION)
+
+                audioManager.setStreamVolume(AudioManager.STREAM_ALARM, maxAlarmVolume, 0)
+                audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, maxMusicVolume, 0)
+                audioManager.setStreamVolume(AudioManager.STREAM_RING, maxRingVolume, 0)
+                audioManager.setStreamVolume(AudioManager.STREAM_NOTIFICATION, maxNotificationVolume, 0)
+
+            } catch (e: Exception) {
+                println("Volume error: ${e.message}")
+            }
+
+            //  Pokreni alarm zvuk
+            playFindDeviceAlarm()
+            println("Alarm sound started")
+
+            //  Vibriraj kontinuirano
+            startContinuousVibration()
+            println("Vibration started")
+
+            //  Blink flashlight
+            startFlashlightBlink()
+            println("Flashlight blinking started")
+
+            //  Pošalji lokaciju periodično
+            startLocationTracking()
+            println("Location tracking started")
+
+            //  Prikaži full-screen alert
+            showFindDeviceAlert()
+            println("Alert dialog shown")
+
+            sendCommandResponseProtobuf(true, "FIND MY DEVICE ACTIVATED! \n\n Alarm sound: ACTIVE\n Vibration: ACTIVE\n Flashlight: BLINKING\n Location tracking: ACTIVE\n Screen brightness: MAXIMUM")
+
+        } catch (e: Exception) {
+            println("Find My Device error: ${e.message}")
+            e.printStackTrace()
+            sendCommandResponseProtobuf(false, "Find My Device failed: ${e.message}")
+        }
+    }
+
+    private fun stopFindMyDevice() {
+        try {
+            findDeviceActive = false
+
+            // Zaustavi sve odvojene jobove
+            findDeviceVibrateJob?.cancel()
+            findDeviceFlashlightJob?.cancel()
+            findDeviceAlarmJob?.cancel()
+
+            // Zaustavi ringtone
+            findDeviceRingtone?.stop()
+
+            // Zaustavi vibraciju
+            vibrator.cancel()
+
+            toggleFlashlight(false)
+
+            // Vrati normalnu svjetlinu
+            runOnUiThread {
+                val layoutParams = window.attributes
+                layoutParams.screenBrightness = -1f // default
+                window.attributes = layoutParams
+            }
+
+            sendCommandResponseProtobuf(true, "Find My Device STOPPED - All alarms deactivated")
+
+        } catch (e: Exception) {
+            sendCommandResponseProtobuf(false, "Stop Find My Device failed: ${e.message}")
+        }
+    }
+
+
+    private fun playFindDeviceAlarm() {
+        findDeviceAlarmJob = telemetryScope.launch {
+            try {
+                // Probaj različite vrste alarm tonova
+                val alarmUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+                    ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+                    ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+
+                if (alarmUri != null) {
+                    findDeviceRingtone = RingtoneManager.getRingtone(this@MainActivity, alarmUri)
+
+                    // Pokušaj postaviti glasnoću
+                    findDeviceRingtone?.let { ringtone ->
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                            ringtone.volume = 1.0f
+                        }
+                    }
+                }
+
+                // Glavna alarm petlja
+                while (findDeviceActive && isActive) {
+                    try {
+                        // Ringtone alarm
+                        findDeviceRingtone?.play()
+
+                        // Backup - ToneGenerator ako ringtone ne radi
+                        try {
+                            val toneGen = ToneGenerator(AudioManager.STREAM_ALARM, 100)
+                            toneGen.startTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 1000)
+                            delay(100)
+                            toneGen.release()
+                        } catch (e: Exception) {
+                            println("ToneGenerator error: ${e.message}")
+                        }
+
+                        delay(2000) // Pauza između alarma
+                    } catch (e: Exception) {
+                        println("Alarm play error: ${e.message}")
+                        delay(1000)
+                    }
+                }
+
+            } catch (e: Exception) {
+                println("Alarm setup error: ${e.message}")
+            }
+        }
+    }
+
+    private fun startContinuousVibration() {
+        findDeviceVibrateJob = telemetryScope.launch {
+            while (findDeviceActive && isActive) {
+                try {
+                    // Jaka vibracija pattern
+                    val pattern = longArrayOf(0, 800, 300, 800, 300, 800)
+                    vibrator.vibrate(pattern, -1)
+                    delay(3000)
+                } catch (e: Exception) {
+                    println("Vibration error: ${e.message}")
+                    delay(1000)
+                }
+            }
+        }
+    }
+
+    private fun startFlashlightBlink() {
+        findDeviceFlashlightJob = telemetryScope.launch {
+            while (findDeviceActive && isActive) {
+                try {
+                    toggleFlashlight(true)
+                    delay(200)
+                    toggleFlashlight(false)
+                    delay(200)
+                } catch (e: Exception) {
+                    println("Flashlight blink error: ${e.message}")
+                    delay(500)
+                }
+            }
+        }
+    }
+
+    private fun startLocationTracking() {
+        telemetryScope.launch {
+            var locationCount = 0
+            while (findDeviceActive && isActive && locationCount < 5) {
+                try {
+                    sendCurrentLocation()
+                    locationCount++
+                    delay(10000) // Šalji lokaciju svakih 10 sekundi
+                } catch (e: Exception) {
+                    println("Location tracking error: ${e.message}")
+                    delay(5000)
+                }
+            }
+        }
+    }
+
+    private fun sendCurrentLocation() {
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
+            == PackageManager.PERMISSION_GRANTED) {
+
+            val locationManager = getSystemService(Context.LOCATION_SERVICE) as LocationManager
+
+            try {
+                val location = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+                    ?: locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+                    ?: locationManager.getLastKnownLocation(LocationManager.PASSIVE_PROVIDER)
+
+                location?.let {
+                    val locationData = """
+                 DEVICE LOCATION UPDATE #${System.currentTimeMillis() % 1000}:
+                 Lat: ${it.latitude}
+                 Lng: ${it.longitude}
+                 Accuracy: ${it.accuracy}m
+                 Time: ${Date(it.time)}
+                ️ Google Maps: https://maps.google.com/?q=${it.latitude},${it.longitude}
+                 Provider: ${it.provider}
+            """.trimIndent()
+
+                    sendCommandResponseProtobuf(true, locationData)
+                } ?: run {
+                    sendCommandResponseProtobuf(true, " Location: Searching for GPS signal... (attempt ${System.currentTimeMillis() % 100})")
+                }
+            } catch (e: Exception) {
+                sendCommandResponseProtobuf(true, " Location error: ${e.message}")
+            }
+        } else {
+            sendCommandResponseProtobuf(true, "📍 Location permission denied - enable location access!")
+        }
+    }
+
+    private fun showFindDeviceAlert() {
+        runOnUiThread {
+            try {
+                val alertDialog = AlertDialog.Builder(this)
+                    .setTitle(" FIND MY DEVICE ACTIVATED! ")
+                    .setMessage("""
+                     Your device is being located remotely!
+                    
+                     Alarm: ACTIVE
+                     Vibration: ACTIVE  
+                     Flashlight: BLINKING
+                     Location: TRACKING
+                    
+                    Tap 'FOUND IT!' to stop all alarms.
+                """.trimIndent())
+                    .setCancelable(false)
+                    .setPositiveButton(" FOUND IT!") { dialog, _ ->
+                        stopFindMyDevice()
+                        dialog.dismiss()
+                    }
+                    .setNegativeButton(" SEND LOCATION") { _, _ ->
+                        sendCurrentLocation()
+                        // Ne zatvaraj dialog - ovako sam trenutno samo pozvati funkciju stopFindMyDevice ako hocu odmah da zatvorim
+                        showFindDeviceAlert() // Prikaži ponovo
+                    }
+                    .create()
+
+                alertDialog.show()
+
+                // Make dialog prominent
+                alertDialog.window?.let { window ->
+                    window.setFlags(
+                        WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON,
+                        WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+                    )
+                    window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
+                }
+
+            } catch (e: Exception) {
+                println("Alert dialog error: ${e.message}")
+                Toast.makeText(this, " FIND MY DEVICE ACTIVE! Check notification!", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+
+    private fun parseActionFromBytes(data: ByteArray): Int {
+        try {
+            if (data.isEmpty()) return 0
+
+            var pos = 0
+            while (pos < data.size - 1) {
+                val tag = data[pos++].toInt() and 0xFF
+                val fieldNum = tag shr 3
+                val wireType = tag and 0x07
+
+                if (fieldNum == 1 && wireType == 0) {
+                    val result = readVarint(data, pos)
+                    println("     Action value found: ${result.first}")
+                    return result.first
+                }
+
+                // Skip this field properly
+                when (wireType) {
+                    0 -> {
+                        val result = readVarint(data, pos)
+                        pos = result.second
+                        println("      Skipped varint field $fieldNum = ${result.first}")
+                    }
+                    2 -> {
+                        val lengthResult = readVarint(data, pos)
+                        pos = lengthResult.second + lengthResult.first
+                        println("    ️  Skipped string field $fieldNum")
+                    }
+                    else -> {
+                        println("    ️  Unknown wire type: $wireType")
+                        pos++
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            println(" Error parsing action: ${e.message}")
+        }
+
+        println("  No action field found, returning 0")
+        return 0
+    }
+
+    private fun parseVolumeLevelFromBytes(data: ByteArray): Int {
+        try {
+            var pos = 0
+            while (pos < data.size - 1) {
+                val tag = data[pos++].toInt() and 0xFF
+                val fieldNum = tag shr 3
+                val wireType = tag and 0x07
+
+                if (fieldNum == 2 && wireType == 0) { // volume_level field
+                    val result = readVarint(data, pos)
+                    println("    Volume level: ${result.first}")
+                    return result.first
+                }
+
+                // Skip field
+                when (wireType) {
+                    0 -> {
+                        val result = readVarint(data, pos)
+                        pos = result.second
+                    }
+                    2 -> {
+                        val lengthResult = readVarint(data, pos)
+                        pos = lengthResult.second + lengthResult.first
+                    }
+                    else -> pos++
+                }
+            }
+        } catch (e: Exception) {
+            println("Error parsing volume level: ${e.message}")
+        }
+        return 0
+    }
+
+    private fun parseNotificationFromBytes(data: ByteArray): Pair<String?, String?> {
+        var title: String? = null
+        var message: String? = null
+
+        try {
+            var pos = 0
+            while (pos < data.size) {
+                if (pos >= data.size - 1) break
+
+                val tag = data[pos++].toInt() and 0xFF
+                val fieldNum = tag shr 3
+                val wireType = tag and 0x07
+
+                if (wireType == 2) { // string field
+                    val lengthResult = readVarint(data, pos)
+                    val length = lengthResult.first
+                    pos = lengthResult.second
+
+                    if (pos + length <= data.size) {
+                        val stringValue = String(data.sliceArray(pos until pos + length), Charsets.UTF_8)
+
+                        when (fieldNum) {
+                            2 -> {
+                                title = stringValue
+                                println("    Notification title: ${title}")
+                            }
+                            3 -> {
+                                message = stringValue
+                                println("    Notification message: ${message}")
+                            }
+                        }
+
+                        pos += length
+                    } else {
+                        break
+                    }
+                } else if (wireType == 0) {
+                    val result = readVarint(data, pos)
+                    pos = result.second
+                } else {
+                    pos++
+                }
+            }
+        } catch (e: Exception) {
+            println("Error parsing notification: ${e.message}")
+        }
+
+        return Pair(title, message)
+    }
+
+    private fun parseUrlFromBytes(data: ByteArray): String? {
+        return try {
+            String(data, Charsets.UTF_8)
+        } catch (e: Exception) {
+            println("Error parsing URL: ${e.message}")
+            null
+        }
+    }
+
+    /*
     private fun parseSimpleProtobufCommand(payload: ByteArray): ProtobufCommandData? {
         try {
+            println("=== SIMPLE PROTOBUF PARSING ===")
+            println("Raw bytes: ${payload.joinToString(" ") { "%02x".format(it) }}")
+
             var pos = 0
             var commandType = -1
             var action = -1
-            var volumeLevel = 0
-            var title: String? = null
-            var message: String? = null
+            var deviceId: String? = null
+            var isField16Present = false
 
             while (pos < payload.size) {
-                if (pos >= payload.size - 1) break
+                if (pos >= payload.size) break
 
                 val tag = payload[pos++].toInt() and 0xFF
                 val fieldNum = tag shr 3
                 val wireType = tag and 0x07
 
-                when (fieldNum) {
-                    1 -> { // type field
-                        if (wireType == 0) {
-                            val result = readVarint(payload, pos)
-                            commandType = result.first
-                            pos = result.second
+                println("Field $fieldNum, WireType $wireType")
+
+                when (wireType) {
+                    0 -> { // Varint
+                        val result = readVarint(payload, pos)
+                        val value = result.first
+                        pos = result.second
+
+                        if (fieldNum == 1) {
+                            commandType = value
+                            println(" Command Type = $commandType")
                         }
                     }
-                    10, 11, 12, 13, 14, 15 -> { // command data fields
-                        if (wireType == 2) { // length-delimited
-                            val lengthResult = readVarint(payload, pos)
-                            val length = lengthResult.first
-                            pos = lengthResult.second
 
-                            if (pos + length <= payload.size) {
-                                val subData = payload.sliceArray(pos until pos + length)
-                                action = parseActionFromSubData(subData)
+                    2 -> { // Length-delimited
+                        val lengthResult = readVarint(payload, pos)
+                        val length = lengthResult.first
+                        pos = lengthResult.second
 
-                                if (fieldNum == 13) { // volume
-                                    volumeLevel = parseVolumeLevelFromSubData(subData)
-                                } else if (fieldNum == 15) { // notification
-                                    val notificationData = parseNotificationFromSubData(subData)
-                                    title = notificationData.first
-                                    message = notificationData.second
+                        if (pos + length > payload.size) break
+
+                        val data = payload.sliceArray(pos until pos + length)
+
+                        when (fieldNum) {
+                            3 -> { // device_id
+                                deviceId = String(data, Charsets.UTF_8)
+                                println(" Device ID: $deviceId")
+                            }
+
+                            16 -> { // FIND MY DEVICE FIELD!
+                                println(" FIELD 16 DETECTED - FIND MY DEVICE!")
+                                isField16Present = true
+
+                                // Parse action from field 16 data
+                                if (data.size >= 2) {
+                                    val actionTag = data[0].toInt() and 0xFF
+                                    if ((actionTag shr 3) == 1 && (actionTag and 0x07) == 0) {
+                                        action = data[1].toInt() and 0xFF
+                                        println(" Action from field 16: $action")
+                                    }
                                 }
+                            }
 
-                                pos += length
+                            10, 11, 12, 13, 14, 15 -> { // Other command fields
+                                println(" Other command field $fieldNum")
+                                // Parse action if not already parsed
+                                if (action == -1 && data.size >= 2) {
+                                    val actionTag = data[0].toInt() and 0xFF
+                                    if ((actionTag shr 3) == 1 && (actionTag and 0x07) == 0) {
+                                        action = data[1].toInt() and 0xFF
+                                        println(" Action: $action")
+                                    }
+                                }
                             }
                         }
-                    }
-                    else -> {
-                        if (wireType == 0) {
-                            val result = readVarint(payload, pos)
-                            pos = result.second
-                        } else if (wireType == 2) {
-                            val lengthResult = readVarint(payload, pos)
-                            pos = lengthResult.second + lengthResult.first
-                        }
+
+                        pos += length
                     }
                 }
             }
 
-            return if (commandType >= 0 && action >= 0) {
-                ProtobufCommandData(commandType, action, volumeLevel, title, message)
-            } else null
+            if (isField16Present) {
+                println(" FORCING commandType to 8 because field 16 detected!")
+                commandType = 8
+            }
+
+            println("=== FINAL RESULT ===")
+            println("Command Type: $commandType")
+            println("Action: $action")
+            println("Field 16 Present: $isField16Present")
+
+            return if (commandType >= 0) {
+                ProtobufCommandData(
+                    type = commandType,
+                    action = if (action >= 0) action else 0,
+                    volumeLevel = 0,
+                    title = null,
+                    message = null,
+                    url = null
+                )
+            } else {
+                null
+            }
 
         } catch (e: Exception) {
+            println("PARSE ERROR: ${e.message}")
+            e.printStackTrace()
+            return null
+        }
+    }
+
+    */
+
+    // ZAMIJENI parseSimpleProtobufCommand() sa ovom PROŠIRENOM verzijom:
+    private fun parseSimpleProtobufCommand(payload: ByteArray): ProtobufCommandData? {
+        try {
+            println("=== EXTENDED PROTOBUF PARSING ===")
+            println("Raw bytes: ${payload.joinToString(" ") { "%02x".format(it) }}")
+
+            var pos = 0
+            var commandType = -1
+            var action = -1
+            var deviceId: String? = null
+            var volumeLevel = 0
+            var title: String? = null
+            var message: String? = null
+            var url: String? = null
+            var isField16Present = false
+
+            while (pos < payload.size) {
+                if (pos >= payload.size) break
+
+                val tag = payload[pos++].toInt() and 0xFF
+                val fieldNum = tag shr 3
+                val wireType = tag and 0x07
+
+                println("Field $fieldNum, WireType $wireType")
+
+                when (wireType) {
+                    0 -> { // Varint
+                        val result = readVarint(payload, pos)
+                        val value = result.first
+                        pos = result.second
+
+                        if (fieldNum == 1) {
+                            commandType = value
+                            println("📌 Command Type = $commandType")
+                        }
+                    }
+
+                    2 -> { // Length-delimited
+                        val lengthResult = readVarint(payload, pos)
+                        val length = lengthResult.first
+                        pos = lengthResult.second
+
+                        if (pos + length > payload.size) break
+
+                        val data = payload.sliceArray(pos until pos + length)
+
+                        when (fieldNum) {
+                            3 -> { // device_id
+                                deviceId = String(data, Charsets.UTF_8)
+                                println("📱 Device ID: $deviceId")
+                            }
+
+                            10, 11, 12 -> { // Basic command fields (flashlight, camera, vibrate)
+                                println("🔧 Basic command field $fieldNum")
+                                action = parseActionFromBytes(data)
+                                println("⚡ Action: $action")
+                            }
+
+                            13 -> { // VOLUME command
+                                println("🔊 Volume command field")
+                                action = parseActionFromBytes(data)
+                                volumeLevel = parseVolumeLevelFromBytes(data)
+                                println("⚡ Volume Action: $action, Level: $volumeLevel")
+                            }
+
+                            14 -> { // SYSTEM command
+                                println("⚙️ System command field")
+                                action = parseActionFromBytes(data)
+                                println("⚡ System Action: $action")
+                            }
+
+                            15 -> { // NOTIFICATION command (također koristi za URL i Phone)
+                                println("📢 Notification/URL/Phone command field")
+                                action = parseActionFromBytes(data)
+                                val notificationData = parseNotificationFromBytes(data)
+                                title = notificationData.first
+                                message = notificationData.second
+
+                                // Za URL komande, URL je u message fieldu
+                                if (title == "URL_LAUNCH" || commandType == 6) {
+                                    url = message
+                                    println("🌐 URL detected: $url")
+                                }
+
+                                println("📢 Title: '$title', Message: '$message'")
+                            }
+
+                            16 -> { // FIND MY DEVICE FIELD!
+                                println("🚨 FIELD 16 DETECTED - FIND MY DEVICE!")
+                                isField16Present = true
+                                action = parseActionFromBytes(data)
+                                println("⚡ Find Device Action: $action")
+                            }
+                        }
+
+                        pos += length
+                    }
+                }
+            }
+
+            // 🔥 FORCE LOGIC: Ako je field 16 prisutan, FORCE commandType na 8
+            if (isField16Present) {
+                println("🔥 FORCING commandType to 8 because field 16 detected!")
+                commandType = 8
+            }
+
+            println("=== FINAL RESULT ===")
+            println("Command Type: $commandType")
+            println("Action: $action")
+            println("Volume Level: $volumeLevel")
+            println("Title: '$title'")
+            println("Message: '$message'")
+            println("URL: '$url'")
+            println("Field 16 Present: $isField16Present")
+
+            return if (commandType >= 0) {
+                ProtobufCommandData(
+                    type = commandType,
+                    action = if (action >= 0) action else 0,
+                    volumeLevel = volumeLevel,
+                    title = title,
+                    message = message,
+                    url = url
+                )
+            } else {
+                null
+            }
+
+        } catch (e: Exception) {
+            println("PARSE ERROR: ${e.message}")
+            e.printStackTrace()
             return null
         }
     }
@@ -399,12 +1131,15 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         var pos = startPos
         var shift = 0
 
-        while (pos < data.size) {
+        while (pos < data.size && shift < 32) {
             val byte = data[pos++].toInt() and 0xFF
             value = value or ((byte and 0x7F) shl shift)
-            if ((byte and 0x80) == 0) break
+
+            if ((byte and 0x80) == 0) {
+                break // Most significant bit is 0, we're done
+            }
+
             shift += 7
-            if (shift >= 32) break
         }
 
         return Pair(value, pos)
@@ -540,7 +1275,11 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
     private fun handleNotificationAction(title: String, message: String) {
         runOnUiThread {
-            Toast.makeText(this@MainActivity, "$title: $message", Toast.LENGTH_LONG).show()
+            if (title == "URL_LAUNCH") {
+                handleUrlAction(message)
+            } else {
+                Toast.makeText(this@MainActivity, "$title: $message", Toast.LENGTH_LONG).show()
+            }
         }
     }
 
@@ -555,7 +1294,6 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         }
     }
 
-    // PROTOBUF COMMAND RESPONSE
     private fun sendCommandResponseProtobuf(success: Boolean, message: String) {
         telemetryScope.launch {
             try {

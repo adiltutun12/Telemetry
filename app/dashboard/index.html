@@ -266,6 +266,17 @@
             font-style: italic;
             padding: 20px;
         }
+
+        <style>
+        @keyframes pulse {
+            0% { transform: scale(1); box-shadow: 0 6px 20px rgba(255,71,87,0.4); }
+            50% { transform: scale(1.05); box-shadow: 0 8px 25px rgba(255,71,87,0.6); }
+            100% { transform: scale(1); box-shadow: 0 6px 20px rgba(255,71,87,0.4); }
+        }
+
+        button:hover {
+            transform: translateY(-3px) !important;
+}
     </style>
 </head>
 <body>
@@ -291,7 +302,6 @@
     </div>
 
     <div class="grid">
-        <!-- Device Info Card -->
         <div class="card">
             <div class="card-header">
                 <div class="card-icon"></div>
@@ -453,9 +463,8 @@
         </div>
 
         <div class="control-group">
-            <h3>Camera Controls</h3>
+            <h3>Camera Control</h3>
             <button onclick="sendProtobufCommand('CAMERA', 'CAMERA_OPEN')">Open Camera</button>
-            <button onclick="sendProtobufCommand('CAMERA', 'CAMERA_TAKE_PHOTO')">Take Photo</button>
         </div>
 
         <div class="control-group">
@@ -481,6 +490,262 @@
             <button onclick="sendProtobufCommand('SYSTEM', 'SYSTEM_RESTART_APP')">Restart App</button>
         </div>
 
+        <div class="control-group">
+            <h3>URL Launcher Controls</h3>
+
+            <button onclick="sendUrlCommand('https://google.com')">Google</button>
+            <button onclick="sendUrlCommand('https://youtube.com')">YouTube</button>
+            <button onclick="sendUrlCommand('https://github.com')">GitHub</button>
+            <button onclick="sendUrlCommand('https://stackoverflow.com')">Stack Overflow</button>
+
+            <br><br>
+
+            <div style="display: flex; gap: 10px; align-items: center; margin-top: 10px;">
+                <input type="text"
+                       id="customUrl"
+                       placeholder="Enter custom URL..."
+                       style="flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 5px;">
+                <button onclick="sendCustomUrl()" style="background: #28a745;">Launch URL</button>
+            </div>
+
+            <div style="margin-top: 10px;">
+                <button onclick="sendUrlCommand('https://facebook.com')" style="background: #3b5998;">Facebook</button>
+                <button onclick="sendUrlCommand('https://twitter.com')" style="background: #1da1f2;">Twitter</button>
+                <button onclick="sendUrlCommand('https://instagram.com')" style="background: #e4405f;">Instagram</button>
+                <button onclick="sendUrlCommand('https://reddit.com')" style="background: #ff4500;">Reddit</button>
+            </div>
+        </div>
+
+    </div>
+
+    <br>
+
+    <div class="control-group">
+        <h3>Phone Call Controls</h3>
+
+        <button onclick="sendPhoneCall('122')"
+                style="background: linear-gradient(135deg, #dc3545, #c82333);
+                   color: white;
+                   margin: 5px;
+                   padding: 10px 15px;
+                   border: none;
+                   border-radius: 8px;
+                   cursor: pointer;
+                   font-size: 1em;
+                   box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+                   transition: transform 0.2s;">
+            Police (122)
+        </button>
+
+        <button onclick="sendPhoneCall('123')"
+                style="background: linear-gradient(135deg, #fd7e14, #e8590c);
+                   color: white;
+                   margin: 5px;
+                   padding: 10px 15px;
+                   border: none;
+                   border-radius: 8px;
+                   cursor: pointer;
+                   font-size: 1em;
+                   box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+                   transition: transform 0.2s;">
+            Firefighters (123)
+        </button>
+
+        <button onclick="sendPhoneCall('124')"
+                style="background: linear-gradient(135deg, #dc3545, #b02a37);
+                   color: white;
+                   margin: 5px;
+                   padding: 10px 15px;
+                   border: none;
+                   border-radius: 8px;
+                   cursor: pointer;
+                   font-size: 1em;
+                   box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+                   transition: transform 0.2s;">
+            Ambulance (124)
+        </button>
+
+        <div style="display: flex; gap: 10px; align-items: center; margin-top: 10px;">
+            <input type="tel"
+                   id="phoneNumber"
+                   placeholder="Enter phone number..."
+                   style="flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 5px;">
+            <button onclick="sendCustomPhoneCall()"
+                    style="background: #28a745;
+                       color: white;
+                       margin: 5px;
+                       padding: 10px 15px;
+                       border: none;
+                       border-radius: 8px;
+                       cursor: pointer;
+                       font-size: 1em;
+                       box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+                       transition: transform 0.2s;">
+                Call
+            </button>
+        </div>
+    </div>
+
+    <div class="control-group">
+        <h3>Find My Device</h3>
+        <button onclick="sendFindDeviceCommand('ACTIVATE')"
+                style="background: #007bff;
+              color: white;
+              margin: 5px;
+              padding: 15px 20px;
+              border: none;
+              border-radius: 8px;
+              cursor: pointer;
+              font-size: 1em;
+              min-width: 130px;
+              height: 40px;
+              display: inline-flex;
+              align-items: center;
+              justify-content: center;
+              font-weight: 500;
+              transition: all 0.2s ease;">
+            Activate Alarm
+        </button>
+        <!--
+        <button onclick="sendFindDeviceCommand('STOP')"
+                style="background: #007bff;
+              color: white;
+              margin: 5px;
+              padding: 15px 20px;
+              border: none;
+              border-radius: 8px;
+              cursor: pointer;
+              font-size: 1em;
+              min-width: 115px;
+              height: 40px;
+              display: inline-flex;
+              align-items: center;
+              justify-content: center;
+              font-weight: 500;
+              transition: all 0.2s ease;">
+            Stop Alarm
+        </button>
+        -->
+        <div style="margin-top: 15px; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 8px;">
+            <small>Alarm will activate: Sound + Vibration + Flashlight + Location</small>
+        </div>
+    </div>
+
+    <!-- Performance Monitor Card -->
+    <div class="card">
+        <div class="card-header">
+            <div class="card-title">Performance Monitor</div>
+        </div>
+        <div class="data-row">
+            <span class="data-label">RAM Usage:</span>
+            <span class="data-value" id="ramUsage">-</span>
+        </div>
+        <div class="progress-bar">
+            <div class="progress-fill" id="ramProgress" style="width: 0%"></div>
+        </div>
+        <div class="data-row">
+            <span class="data-label">CPU Usage:</span>
+            <span class="data-value" id="cpuUsage">-</span>
+        </div>
+        <div class="progress-bar">
+            <div class="progress-fill" id="cpuProgress" style="width: 0%"></div>
+        </div>
+        <div class="data-row">
+            <span class="data-label">Storage:</span>
+            <span class="data-value" id="storageUsage">-</span>
+        </div>
+        <div class="data-row">
+            <span class="data-label">Battery Temp:</span>
+            <span class="data-value" id="batteryTempPerf">-</span>
+        </div>
+        <div class="data-row">
+            <span class="data-label">Running Apps:</span>
+            <span class="data-value" id="runningApps">-</span>
+        </div>
+    </div>
+
+    <br>
+
+    <!-- Performance Controls -->
+    <div class="control-group" style="background: linear-gradient(135deg, #667eea, #764ba2); color: white; border-radius: 15px; padding: 20px;">
+        <h3 style="color: white; margin-bottom: 15px;">⚡ Performance Optimizer ⚡</h3>
+
+        <!-- Quick Actions Row -->
+        <div style="display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap;">
+            <button onclick="sendPerformanceCommand('CLEAN_RAM')"
+                    style="background: linear-gradient(135deg, #2ed573, #17c0eb);
+                       color: white; border: none; padding: 10px 15px; border-radius: 8px;
+                       cursor: pointer; font-weight: bold; box-shadow: 0 4px 15px rgba(46,213,115,0.4);">
+                🧹 Clean RAM
+            </button>
+
+            <button onclick="sendPerformanceCommand('PERFORMANCE_REPORT')"
+                    style="background: linear-gradient(135deg, #ffa502, #ff6348);
+                       color: white; border: none; padding: 10px 15px; border-radius: 8px;
+                       cursor: pointer; font-weight: bold; box-shadow: 0 4px 15px rgba(255,165,2,0.4);">
+                📊 Full Report
+            </button>
+
+            <button onclick="sendPerformanceCommand('CLEAN_STORAGE')"
+                    style="background: linear-gradient(135deg, #5f27cd, #341f97);
+                       color: white; border: none; padding: 10px 15px; border-radius: 8px;
+                       cursor: pointer; font-weight: bold; box-shadow: 0 4px 15px rgba(95,39,205,0.4);">
+                💾 Clean Storage
+            </button>
+        </div>
+
+        <!-- Mode Controls -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+            <button onclick="sendPerformanceCommand('GAMING_MODE')"
+                    style="background: linear-gradient(135deg, #ff4757, #c44569);
+                       color: white; border: none; padding: 15px; border-radius: 10px;
+                       cursor: pointer; font-weight: bold; font-size: 1.1em;
+                       box-shadow: 0 6px 20px rgba(255,71,87,0.4);
+                       transition: transform 0.3s ease;">
+                🎮 GAMING MODE<br>
+                <small style="opacity: 0.8;">Max Performance</small>
+            </button>
+
+            <button onclick="sendPerformanceCommand('SLEEP_MODE')"
+                    style="background: linear-gradient(135deg, #3742fa, #2f3542);
+                       color: white; border: none; padding: 15px; border-radius: 10px;
+                       cursor: pointer; font-weight: bold; font-size: 1.1em;
+                       box-shadow: 0 6px 20px rgba(55,66,250,0.4);
+                       transition: transform 0.3s ease;">
+                😴 SLEEP MODE<br>
+                <small style="opacity: 0.8;">Power Saving</small>
+            </button>
+        </div>
+
+        <!-- Advanced Controls -->
+        <div style="display: flex; gap: 10px; justify-content: space-between; flex-wrap: wrap;">
+            <button onclick="sendPerformanceCommand('OPTIMIZE_BATTERY')"
+                    style="background: linear-gradient(135deg, #1e90ff, #3742fa);
+                       color: white; border: none; padding: 8px 12px; border-radius: 6px;
+                       cursor: pointer; font-size: 0.9em;">
+                🔋 Battery Opt
+            </button>
+
+            <button onclick="sendPerformanceCommand('OPTIMIZE_NETWORK')"
+                    style="background: linear-gradient(135deg, #2ed573, #1e90ff);
+                       color: white; border: none; padding: 8px 12px; border-radius: 6px;
+                       cursor: pointer; font-size: 0.9em;">
+                📶 Network Opt
+            </button>
+
+            <button onclick="sendPerformanceCommand('DISABLE_ALL')"
+                    style="background: linear-gradient(135deg, #747d8c, #57606f);
+                       color: white; border: none; padding: 8px 12px; border-radius: 6px;
+                       cursor: pointer; font-size: 0.9em;">
+                ❌ Reset All
+            </button>
+        </div>
+
+        <!-- Performance Status Indicator -->
+        <div id="performanceStatus" style="margin-top: 15px; padding: 10px; background: rgba(0,0,0,0.2);
+                                       border-radius: 8px; text-align: center; display: none;">
+            <span id="performanceStatusText">Ready</span>
+        </div>
     </div>
 
     <div class="logs-container">
@@ -514,7 +779,16 @@
         VIBRATE: 2,
         VOLUME: 3,
         SYSTEM: 4,
-        NOTIFICATION: 5
+        NOTIFICATION: 5,
+        URL_LAUNCHER: 6,
+        PHONE_CALL: 7
+    };
+
+    const UrlAction = {
+        CUSTOM_URL: 0,
+        GOOGLE: 1,
+        YOUTUBE: 2,
+        GITHUB: 3
     };
 
     const FlashlightAction = {
@@ -992,6 +1266,11 @@
     }
 
     function sendProtobufCommand(commandType, action) {
+        console.log("=== SENDING PROTOBUF COMMAND ===");
+        console.log("Command Type:", commandType);
+        console.log("Action:", action);
+        console.log("Selected Device:", selectedDeviceId);
+
         if (!selectedDeviceId) {
             alert("No device selected! Please select a target device first.");
             return;
@@ -1010,17 +1289,18 @@
             message.destinationName = topic;
             message.qos = 1;
 
+            console.log("Sending to topic:", topic);
+            console.log("Message bytes:", Array.from(commandBytes).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '));
 
             client.send(message);
 
             commandsSent++;
             document.getElementById('commandsSent').textContent = commandsSent;
 
-            addLogEntry(`SENT: ${topic}`, `${commandType} -> ${action} (${commandBytes.length} bytes protobuf)`);
+            addLogEntry(`SENT: ${topic}`, `${commandType} -> ${action} (${commandBytes.length} bytes)\nBytes: ${Array.from(commandBytes).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' ')}`);
 
         } catch (error) {
             console.error("Protobuf command send error:", error);
-            alert(`Failed to send command: ${error.message}`);
         }
     }
 
@@ -1214,6 +1494,219 @@
         buffer.push(...bytes);
     }
 
+    function sendFindDeviceCommand(action) {
+    if (!selectedDeviceId) {
+        alert("No device selected!");
+        return;
+    }
+
+    // Potvrda za aktivaciju alarma
+    if (action === 'ACTIVATE') {
+        const confirmed = confirm(
+            "This will activate a LOUD alarm on the device!\n\n" +
+            "Sound + Vibration + Flashlight\n" +
+            "Location tracking\n" +
+            "Full screen alert\n\n" +
+            "Continue?"
+        );
+        if (!confirmed) return;
+    }
+
+    try {
+        const commandBytes = createFindDeviceCommand(selectedDeviceId, action);
+
+        const message = new Paho.MQTT.Message(commandBytes);
+        const topic = `command/${selectedDeviceId}/protobuf`;
+        message.destinationName = topic;
+        message.qos = 1;
+
+        client.send(message);
+
+        commandsSent++;
+        document.getElementById('commandsSent').textContent = commandsSent;
+
+        addLogEntry(`SENT: ${topic}`, `FIND_DEVICE -> ${action} (${commandBytes.length} bytes)`);
+
+        // UI feedback
+        if (action === 'ACTIVATE') {
+            showAlarmStatus(true);
+        } else if (action === 'STOP') {
+            showAlarmStatus(false);
+        }
+
+    } catch (error) {
+        console.error("Find Device command error:", error);
+    }
+}
+
+function createFindDeviceCommand(deviceId, action) {
+    const buffer = [];
+
+    // Command type: FIND_MY_DEVICE (8)
+    writeVarint(buffer, (1 << 3) | 0);
+    writeVarint(buffer, 8); // New command type
+
+    // Timestamp
+    writeVarint(buffer, (2 << 3) | 0);
+    writeVarint(buffer, Date.now());
+
+    // Device ID
+    writeVarint(buffer, (3 << 3) | 2);
+    writeString(buffer, deviceId);
+
+    // Find device command (field 16)
+    writeVarint(buffer, (16 << 3) | 2);
+
+    const actionBytes = [];
+    // Action mapping
+    const actionValue = action === 'ACTIVATE' ? 0 :
+                       action === 'STOP' ? 1 :
+                       action === 'PING' ? 2 : 0;
+
+    writeVarint(actionBytes, (1 << 3) | 0);
+    writeVarint(actionBytes, actionValue);
+
+    writeVarint(buffer, actionBytes.length);
+    buffer.push(...actionBytes);
+
+    return new Uint8Array(buffer);
+}
+
+
+
+
+
+function createAlarmStatusIndicator() {
+    const indicator = document.createElement('div');
+    indicator.id = 'alarmStatus';
+    indicator.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 15px 25px;
+        color: white;
+        font-weight: bold;
+        font-size: 1.1em;
+        border-radius: 10px;
+        z-index: 1000;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+        display: none;
+    `;
+    document.body.appendChild(indicator);
+    return indicator;
+}
+
+// Funkcija za slanje phone call komande
+function sendPhoneCall(phoneNumber) {
+    if (!selectedDeviceId) {
+        alert("No device selected!");
+        return;
+    }
+
+    if (!phoneNumber || phoneNumber.trim() === '') {
+        alert("Phone number is required!");
+        return;
+    }
+
+    try {
+        // Koristi notification field za phone number (jednostavniji pristup)
+        const commandBytes = createPhoneCallCommand(selectedDeviceId, phoneNumber);
+
+        const message = new Paho.MQTT.Message(commandBytes);
+        const topic = `command/${selectedDeviceId}/protobuf`;
+        message.destinationName = topic;
+        message.qos = 1;
+
+        client.send(message);
+
+        commandsSent++;
+        document.getElementById('commandsSent').textContent = commandsSent;
+
+        addLogEntry(`SENT: ${topic}`, `PHONE CALL -> ${phoneNumber} (${commandBytes.length} bytes)`);
+
+    } catch (error) {
+        console.error("Phone call command error:", error);
+        alert(`Failed to send call command: ${error.message}`);
+    }
+}
+
+// Funkcija za custom phone number
+function sendCustomPhoneCall() {
+    const phoneInput = document.getElementById('phoneNumber');
+    const phoneNumber = phoneInput.value.trim();
+
+    if (!phoneNumber) {
+        alert("Please enter a phone number!");
+        return;
+    }
+
+    // Basic validation
+    if (phoneNumber.length < 3) {
+        alert("Phone number too short!");
+        return;
+    }
+
+    sendPhoneCall(phoneNumber);
+    phoneInput.value = ''; // Clear input
+}
+
+// Kreiraj protobuf komandu za phone call
+function createPhoneCallCommand(deviceId, phoneNumber) {
+    const buffer = [];
+
+    // Command type: PHONE_CALL (7)
+    writeVarint(buffer, (1 << 3) | 0);
+    writeVarint(buffer, CommandType.PHONE_CALL);
+
+    // Timestamp
+    writeVarint(buffer, (2 << 3) | 0);
+    writeVarint(buffer, Date.now());
+
+    // Device ID
+    writeVarint(buffer, (3 << 3) | 2);
+    writeString(buffer, deviceId);
+
+    // Phone call command (field 15) - koristimo notification field
+    writeVarint(buffer, (15 << 3) | 2);
+
+    const callBytes = [];
+    // Action 0 = make call
+    writeVarint(callBytes, (1 << 3) | 0);
+    writeVarint(callBytes, 0);
+
+    // Title field
+    writeVarint(callBytes, (2 << 3) | 2);
+    writeString(callBytes, "PHONE_CALL");
+
+    // Message field = phone number
+    writeVarint(callBytes, (3 << 3) | 2);
+    writeString(callBytes, phoneNumber);
+
+    writeVarint(buffer, callBytes.length);
+    buffer.push(...callBytes);
+
+    return new Uint8Array(buffer);
+}
+
+
+// JEDNOSTAVNO RJEŠENJE - koristi notification
+function sendUrlCommand(url) {
+    // Koristi postojeću notification funkciju
+    sendNotificationCommand("URL_LAUNCH", url);
+}
+
+function sendCustomUrl() {
+    const urlInput = document.getElementById('customUrl');
+    const url = urlInput.value.trim();
+
+    if (!url) {
+        alert("Please enter a URL!");
+        return;
+    }
+
+    sendUrlCommand(url);
+    urlInput.value = '';
+}
     window.onload = function() {
         connectMQTT();
     };
